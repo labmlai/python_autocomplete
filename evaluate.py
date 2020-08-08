@@ -88,11 +88,10 @@ def main():
     experiment.create(name="source_code",
                       comment='lstm model')
 
-    conf_dict = experiment.load_configs('f940fc62d94611ea859dffe75b4de93a')
-    conf_dict['n_tokens'] = 118
+    conf_dict = experiment.load_configs('85258e8ed95411eab263ef492595f79c')
     experiment.configs(conf, conf_dict, 'run')
     experiment.add_pytorch_models(get_modules(conf))
-    experiment.load('f940fc62d94611ea859dffe75b4de93a')
+    experiment.load('85258e8ed95411eab263ef492595f79c')
 
     evaluator = Evaluator(conf.model, conf.field, conf.text.valid)
     evaluator.eval()

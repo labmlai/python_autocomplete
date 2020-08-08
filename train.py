@@ -200,13 +200,13 @@ def train_loader(c: Configs):
 
 def main():
     conf = Configs()
-    # conf.d_model = 512
-    # conf.d_ff = 2048
-    # conf.n_heads = 16
-    # conf.n_layers = 6
-    # conf.seq_len = 256
-    # conf.epochs = 1024
-    # conf.dropout = 0.4
+    conf.d_model = 512
+    conf.d_ff = 2048
+    conf.n_heads = 16
+    conf.n_layers = 6
+    conf.seq_len = 256
+    conf.epochs = 1024
+    conf.dropout = 0.4
     experiment.create(name="source_code",
                       comment='lstm model')
     experiment.configs(conf, 'run')
