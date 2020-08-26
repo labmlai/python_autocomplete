@@ -13,6 +13,8 @@ from labml.logger import Text
 from labml.utils.pytorch import get_modules
 from torch.utils.data import IterableDataset
 
+from transformers import TransformerConfigs
+
 
 class TextDataset:
     train: str
@@ -88,22 +90,22 @@ class SequentialDataLoader(IterableDataset):
         return data, target
 
 
-class Configs(DeviceConfigs, TrainValidConfigs):
+class Configs(TrainValidConfigs):
+    device = DeviceConfigs()
     model: Module
     text: TextDataset
-    batch_size: int = 20
-    seq_len: int = 32
+    batch_size: int = 16
+    seq_len: int = 512
     n_tokens: int
-    d_model: int = 200
+    d_model: int = 512
     n_layers: int = 2
     dropout: float = 0.2
-    n_heads: int = 2
-    d_ff: int = 400
-    d_lstm: int = 200
+    d_lstm: int = 512
     tokenizer: Callable
 
     is_save_models = True
-    is_relative_attention = False
+
+    transformer: TransformerConfigs
 
     def run(self):
         for _ in self.training_loop:
@@ -112,7 +114,7 @@ class Configs(DeviceConfigs, TrainValidConfigs):
             for i in monit.iterate('Sample', 25):
                 data = self.text.text_to_i(prompt).unsqueeze(-1)
                 data = data.to(self.device)
-                output, _ = self.model(data)
+                output, *_ = self.model(data)
                 output = output.argmax(dim=-1).squeeze()
                 prompt += '' + self.text.itos[output[-1]]
                 log += [('' + self.text.itos[output[-1]], Text.value)]
@@ -139,11 +141,24 @@ def simple_accuracy():
     return SimpleAccuracyFunc()
 
 
+@option(Configs.transformer)
+def default_transformer(c: Configs):
+    conf = TransformerConfigs()
+    conf.d_model = c.d_model
+    conf.n_layers = c.n_layers
+    conf.n_src_vocab = c.n_tokens
+    conf.n_tgt_vocab = c.n_tokens
+    conf.dropout = c.dropout
+
+    return conf
+
+
 @option(Configs.optimizer)
 def _optimizer(c: Configs):
     optimizer = OptimizerConfigs()
     optimizer.parameters = c.model.parameters()
     optimizer.optimizer = 'Adam'
+    optimizer.d_model = c.d_model
 
     return optimizer
 
@@ -170,11 +185,22 @@ def _n_tokens(c: Configs):
 
 @option(Configs.model)
 def lstm_model(c: Configs):
-    from model import SimpleLstmModel
-    m = SimpleLstmModel(encoding_size=c.n_tokens,
-                        embedding_size=c.d_model,
-                        lstm_size=c.d_lstm,
-                        lstm_layers=c.n_layers)
+    from models.lstm import LstmModel
+    m = LstmModel(n_tokens=c.n_tokens,
+                  embedding_size=c.d_model,
+                  lstm_size=c.d_lstm,
+                  lstm_layers=c.n_layers)
+    return m.to(c.device)
+
+
+@option(Configs.model)
+def transformer_model(c: Configs):
+    from models.transformer import TransformerModel
+    m = TransformerModel(n_tokens=c.n_tokens,
+                         d_model=c.d_model,
+                         encoder=c.transformer.encoder,
+                         src_embed=c.transformer.src_embed)
+
     return m.to(c.device)
 
 
@@ -210,16 +236,16 @@ def train_loader(c: Configs):
 
 def main():
     conf = Configs()
-    conf.d_model = 512
-    conf.d_ff = 2048
-    conf.n_heads = 16
     conf.n_layers = 6
-    conf.seq_len = 256
+    conf.seq_len = 512
     conf.epochs = 1024
-    conf.dropout = 0.4
+    conf.model = 'transformer_model'
     experiment.create(name="source_code",
                       comment='lstm model')
-    experiment.configs(conf, 'run')
+    experiment.configs(conf, {
+        'optimizer.optimizer': 'Noam',
+        'device.cuda_device': 0
+    }, 'run')
     experiment.add_pytorch_models(get_modules(conf))
     # experiment.load('d5ba7f56d88911eaa6629b54a83956dc')
     experiment.start()

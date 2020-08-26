@@ -1,20 +1,21 @@
-from labml.helpers.pytorch.module import Module
 from torch import nn
 
+from labml.helpers.pytorch.module import Module
 
-class SimpleLstmModel(Module):
+
+class LstmModel(Module):
     def __init__(self, *,
-                 encoding_size,
-                 embedding_size,
-                 lstm_size,
-                 lstm_layers):
+                 n_tokens: int,
+                 embedding_size: int,
+                 lstm_size: int,
+                 lstm_layers: int):
         super().__init__()
 
-        self.embedding = nn.Embedding(encoding_size, embedding_size)
+        self.embedding = nn.Embedding(n_tokens, embedding_size)
         self.lstm = nn.LSTM(input_size=embedding_size,
                             hidden_size=lstm_size,
                             num_layers=lstm_layers)
-        self.fc = nn.Linear(lstm_size, encoding_size)
+        self.fc = nn.Linear(lstm_size, n_tokens)
 
     def __call__(self, x, h0=None, c0=None):
         # shape of x is [seq, batch, feat]
