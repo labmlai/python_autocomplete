@@ -3,11 +3,11 @@
 """
 Parse all files and write to a single file
 """
-import os
 import string
 from pathlib import Path, PurePath
 from typing import List, NamedTuple
 
+import numpy as np
 from labml import logger, monit, lab
 
 PRINTABLE = set(string.printable)
@@ -76,6 +76,8 @@ def _load_code(path: PurePath, source_files: List[_PythonFile]):
 
 def main():
     source_files = _GetPythonFiles().files
+
+    np.random.shuffle(source_files)
 
     logger.inspect(source_files)
 

@@ -1,42 +1,73 @@
-from typing import Callable
+from pathlib import PurePath
+from typing import Callable, List
 
 import torch
 import torch.nn as nn
-import torchtext
-from labml import lab, experiment, tracker
-from labml.configs import option, BaseConfigs
+from labml import lab, experiment, tracker, monit, logger
+from labml.configs import option
 from labml.helpers.pytorch.device import DeviceConfigs
 from labml.helpers.pytorch.module import Module
-from labml.helpers.pytorch.train_valid import TrainValidConfigs
+from labml.helpers.pytorch.optimizer import OptimizerConfigs
+from labml.helpers.pytorch.train_valid import TrainValidConfigs, Mode
+from labml.logger import Text
 from labml.utils.pytorch import get_modules
+from torch.utils.data import IterableDataset
 
 
-class OptimizerConfigs(BaseConfigs):
-    optimizer: torch.optim.Adam = 'adam'
-    learning_rate = 2.4e-4
-    parameters: any
-    d_model: int
+class TextDataset:
+    train: str
+    valid: str
+    standard_tokens: List[str] = []
 
-    def __init__(self):
-        super().__init__(_primary='optimizer')
+    @staticmethod
+    def load(path: PurePath):
+        with open(str(path), 'r') as f:
+            return f.read()
+
+    def __init__(self, path: PurePath, tokenizer: Callable):
+        self.tokenizer = tokenizer
+        self.path = path
+
+        with monit.section("Load data"):
+            self.train = self.load(path / 'train.py')
+            self.valid = self.load(path / 'valid.py')
+
+        self.create_tokens()
+
+    def create_tokens(self):
+        self.n_tokens = len(self.standard_tokens)
+        self.stoi = {t: i for i, t in enumerate(self.standard_tokens)}
+
+        with monit.section("Tokenize"):
+            tokens = self.tokenizer(self.train + self.valid)
+            tokens = sorted(list(set(tokens)))
+
+        for t in monit.iterate("Build vocabulary", tokens):
+            self.stoi[t] = self.n_tokens
+            self.n_tokens += 1
+
+        self.itos = [''] * self.n_tokens
+        for t, n in self.stoi.items():
+            self.itos[n] = t
+
+    def text_to_i(self, text: str) -> torch.Tensor:
+        tokens = self.tokenizer(text)
+        return torch.tensor([self.stoi[s] for s in tokens], dtype=torch.long)
+
+    def __repr__(self):
+        return f'{len(self.train)}, {len(self.valid)} - {str(self.path)}'
 
 
-@option(OptimizerConfigs.optimizer, 'adam')
-def adam_optimizer(c: OptimizerConfigs):
-    return torch.optim.Adam(c.parameters, lr=c.learning_rate)
-
-
-class SequentialDataLoader:
-    def __init__(self, *, text: str, field: torchtext.data.Field,
-                 batch_size: int, seq_len: int,
-                 device: torch.device):
+class SequentialDataLoader(IterableDataset):
+    def __init__(self, *, text: str, dataset: TextDataset,
+                 batch_size: int, seq_len: int):
         self.seq_len = seq_len
-        data = field.numericalize([text])
-        n_batch = data.size(0) // batch_size
+        data = dataset.text_to_i(text)
+        n_batch = data.shape[0] // batch_size
         data = data.narrow(0, 0, n_batch * batch_size)
         data = data.view(batch_size, -1).t().contiguous()
-        self.data = data.to(device)
-        self.dataset = self.data
+        self.data = data
+        self.dataset = data.flatten()
 
     def __len__(self):
         return self.data.shape[0] // self.seq_len
@@ -59,8 +90,7 @@ class SequentialDataLoader:
 
 class Configs(DeviceConfigs, TrainValidConfigs):
     model: Module
-    field: torchtext.data.Field
-    text: 'Dataset'
+    text: TextDataset
     batch_size: int = 20
     seq_len: int = 32
     n_tokens: int
@@ -78,18 +108,22 @@ class Configs(DeviceConfigs, TrainValidConfigs):
     def run(self):
         for _ in self.training_loop:
             prompt = 'def train('
-            for i in range(50):
-                data = self.tokenizer(prompt)
-                data = self.field.numericalize([data])
+            log = [(prompt, Text.subtle)]
+            for i in monit.iterate('Sample', 25):
+                data = self.text.text_to_i(prompt).unsqueeze(-1)
                 data = data.to(self.device)
                 output, _ = self.model(data)
                 output = output.argmax(dim=-1).squeeze()
-                prompt += '' + self.field.vocab.itos[output[-1]]
+                prompt += '' + self.text.itos[output[-1]]
+                log += [('' + self.text.itos[output[-1]], Text.value)]
 
-            print(prompt)
+            logger.log(log)
 
-            with tracker.namespace('train'):
-                self.trainer()
+            with Mode(is_train=True,
+                      is_log_parameters=self.is_log_parameters,
+                      is_log_activations=self.is_log_activations):
+                with tracker.namespace('train'):
+                    self.trainer()
             with tracker.namespace('valid'):
                 self.validator()
 
@@ -109,8 +143,7 @@ def simple_accuracy():
 def _optimizer(c: Configs):
     optimizer = OptimizerConfigs()
     optimizer.parameters = c.model.parameters()
-    optimizer.d_model = c.d_model
-    optimizer.optimizer = 'adam'
+    optimizer.optimizer = 'Adam'
 
     return optimizer
 
@@ -132,8 +165,7 @@ def _loss_func(c: Configs):
 
 @option(Configs.n_tokens)
 def _n_tokens(c: Configs):
-    assert c.text
-    return len(c.field.vocab.stoi)
+    return c.text.n_tokens
 
 
 @option(Configs.model)
@@ -155,47 +187,25 @@ def character():
     return character_tokenizer
 
 
-@option(Configs.field)
-def _field(c: Configs):
-    return torchtext.data.Field(tokenize=c.tokenizer,
-                                init_token='<sos>',
-                                eos_token='<eos>',
-                                lower=True)
-
-
-class Dataset:
-    def __init__(self, train: str, valid: str):
-        self.train = train
-        self.valid = valid
-
-
 @option(Configs.text)
-def wiki_text_2(c: Configs):
-    with open(str(lab.get_data_path() / 'train.py'), 'r') as f:
-        train = f.read()
-    with open(str(lab.get_data_path() / 'valid.py'), 'r') as f:
-        valid = f.read()
-
-    c.field.build_vocab(train)
-    return Dataset(train, valid)
+def source_code(c: Configs):
+    return TextDataset(lab.get_data_path(), c.tokenizer)
 
 
 @option(Configs.train_loader)
 def train_loader(c: Configs):
     return SequentialDataLoader(text=c.text.train,
-                                field=c.field,
+                                dataset=c.text,
                                 batch_size=c.batch_size,
-                                seq_len=c.seq_len,
-                                device=c.device)
+                                seq_len=c.seq_len)
 
 
 @option(Configs.valid_loader)
 def train_loader(c: Configs):
     return SequentialDataLoader(text=c.text.valid,
-                                field=c.field,
+                                dataset=c.text,
                                 batch_size=c.batch_size,
-                                seq_len=c.seq_len,
-                                device=c.device)
+                                seq_len=c.seq_len)
 
 
 def main():

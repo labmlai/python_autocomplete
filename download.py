@@ -9,7 +9,17 @@ REPOS = [
     'lab-ml/source_code_modelling',
     ' sherlock-project / sherlock ',
     'Rapptz / discord.py ',
-    ' Dod-o / Statistical-Learning-Method_Code '
+    ' Dod-o / Statistical-Learning-Method_Code ',
+    'Palashio / libra ',
+    'PrefectHQ / prefect ',
+    ' openai / gpt-2 ',
+    'deepfakes / faceswap ',
+    'PaddlePaddle / models ',
+    'google-research / bert ',
+    'PyTorchLightning / pytorch-lightning ',
+    'neuml / txtai ',
+    'pytorch / fairseq ',
+    'karpathy/minGPT'
 ]
 
 

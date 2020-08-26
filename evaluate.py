@@ -1,12 +1,11 @@
 import torch
 import torch.nn
-import torchtext
 from labml import experiment, logger
 from labml.helpers.pytorch.module import Module
 from labml.logger import Text, Style
 from labml.utils.pytorch import get_modules
 
-from train import Configs
+from train import Configs, TextDataset
 
 
 class Predictor:
@@ -14,8 +13,8 @@ class Predictor:
     Predicts the next few characters
     """
 
-    def __init__(self, model: Module, field: torchtext.data.Field):
-        self.field = field
+    def __init__(self, model: Module, dataset: TextDataset):
+        self.dataset = dataset
         self.model = model
 
         # Initial state
@@ -29,7 +28,7 @@ class Predictor:
         self.time_check = 0
 
     def get_predictions(self, char: str) -> torch.Tensor:
-        data = torch.tensor([[self.field.vocab.stoi[char]]],
+        data = torch.tensor([[self.dataset.stoi[char]]],
                             dtype=torch.long,
                             device=self.model.device)
         # Get predictions
@@ -46,13 +45,13 @@ class Predictor:
     def get_suggestion(self, char: str) -> str:
         prediction = self.get_predictions(char)
         best = prediction.argmax(-1).squeeze().item()
-        return self.field.vocab.itos[best]
+        return self.dataset.itos[best]
 
 
 class Evaluator:
-    def __init__(self, model: Module, field: torchtext.data.Field, text: str):
+    def __init__(self, model: Module, dataset: TextDataset, text: str):
         self.text = text
-        self.predictor = Predictor(model, field)
+        self.predictor = Predictor(model, dataset)
 
     def eval(self):
         line_no = 1
@@ -88,12 +87,13 @@ def main():
     experiment.create(name="source_code",
                       comment='lstm model')
 
-    conf_dict = experiment.load_configs('85258e8ed95411eab263ef492595f79c')
+    # Replace this with your training experiment UUID
+    conf_dict = experiment.load_configs('9c8c24fae75c11ea8e22551c650c3796')
     experiment.configs(conf, conf_dict, 'run')
     experiment.add_pytorch_models(get_modules(conf))
-    experiment.load('85258e8ed95411eab263ef492595f79c')
+    experiment.load('9c8c24fae75c11ea8e22551c650c3796')
 
-    evaluator = Evaluator(conf.model, conf.field, conf.text.valid)
+    evaluator = Evaluator(conf.model, conf.text, conf.text.valid)
     evaluator.eval()
 
 

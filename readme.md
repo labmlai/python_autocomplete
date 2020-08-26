@@ -1,18 +1,18 @@
-This is a simpler rewrite of [Python Autocomplete](https://github.com/vpj/python_autocomplete).
-It is toy project we started
-to see how well a simple LSTM model can autocomplete python code.
+# Source Code Modelling
 
-## Try it yourself
+This repo trains deep learning models on source code.
+
+### Try it yourself
 
 1. Clone this repo
-
 2. Install requirements from `requirements.txt`
+3. Download Github repos by running `download.py`. Edit this file to change the list of repos.
+4. Run `extrat_downloads.sh` to extract the downloaded zip files to `data/source`.
+ You can directly copy any python code to `data/source` to train on them.
+5. Run `extract_code.py` to collect all python files.
+ The collected code will be written to `data/train.py` and, `data/eval.py`.
+6. Run `train.py` to train the model.
+7. Run `evaluate.py` to evaluate the model.
+8. Enjoy!
 
-3. Copy data to `./data/source`
-
-4. Run `extract_code.py` to collect all python files, encode and merge them into `all.py`
-
-5. Run `train.py` to train the model
-
-6. Run `evaluate.py` to evaluate the model.
-
+If you have any questions please open an issue on Github.
