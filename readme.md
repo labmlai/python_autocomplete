@@ -1,4 +1,4 @@
-# Source Code Modelling
+# Source Code Modeling
 
 This repo trains deep learning models on source code.
 
@@ -9,7 +9,7 @@ This repo trains deep learning models on source code.
 3. Download Github repos by running `download.py`. Edit this file to change the list of repos.
 4. Run `extrat_downloads.sh` to extract the downloaded zip files to `data/source`.
  You can directly copy any python code to `data/source` to train on them.
-5. Run `extract_code.py` to collect all python files.
+5. Run `create_dataset.py` to collect all python files.
  The collected code will be written to `data/train.py` and, `data/eval.py`.
 6. Clone our [transformers repo](https://github.com/lab-ml/transformers).
  And create a symbolic link to `transformers` package inside it (or just copy the entire folder).

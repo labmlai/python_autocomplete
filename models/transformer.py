@@ -29,7 +29,7 @@ class TransformerModel(Module):
             self.src_mask = mask
 
         src = self.src_embed(src)
-        with monit.section("transformer"):
-            output = self.encoder(src, self.src_mask)
+        # with monit.section("transformer"):
+        output = self.encoder(src, self.src_mask)
         output = self.fc(output)
         return output,

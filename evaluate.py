@@ -13,14 +13,15 @@ class Predictor:
     Predicts the next few characters
     """
 
-    def __init__(self, model: Module, dataset: TextDataset):
+    def __init__(self, model: Module, dataset: TextDataset, is_lstm=True):
+        self.is_lstm = is_lstm
         self.dataset = dataset
         self.model = model
 
         # Initial state
         self._h0 = None
         self._c0 = None
-        self._last_char = None
+        self.prompt = ''
 
         # For timing
         self.time_add = 0
@@ -28,9 +29,31 @@ class Predictor:
         self.time_check = 0
 
     def get_predictions(self, char: str) -> torch.Tensor:
+        if self.is_lstm:
+            return self.get_predictions_lstm(char)
+        else:
+            return self.get_predictions_transformer(char)
+
+    def get_predictions_transformer(self, char: str) -> torch.Tensor:
+        self.prompt += char
+        self.prompt = self.prompt[-512:]
+        data = torch.tensor([[self.dataset.stoi[c]] for c in self.prompt],
+                            dtype=torch.long,
+                            device=self.model.device)
+
+        # Get predictions
+        prediction, *_ = self.model(data)
+
+        # Final prediction
+        prediction = prediction[-1, :, :]
+
+        return prediction.detach().cpu().numpy()
+
+    def get_predictions_lstm(self, char: str) -> torch.Tensor:
         data = torch.tensor([[self.dataset.stoi[char]]],
                             dtype=torch.long,
                             device=self.model.device)
+
         # Get predictions
         prediction, (h0, c0) = self.model(data, self._h0, self._c0)
 
@@ -49,9 +72,9 @@ class Predictor:
 
 
 class Evaluator:
-    def __init__(self, model: Module, dataset: TextDataset, text: str):
+    def __init__(self, model: Module, dataset: TextDataset, text: str, is_lstm=True):
         self.text = text
-        self.predictor = Predictor(model, dataset)
+        self.predictor = Predictor(model, dataset, is_lstm)
 
     def eval(self):
         line_no = 1
@@ -84,16 +107,17 @@ class Evaluator:
 
 def main():
     conf = Configs()
-    experiment.create(name="source_code",
+    experiment.create(name="source_code_eval",
                       comment='lstm model')
 
     # Replace this with your training experiment UUID
-    conf_dict = experiment.load_configs('9c8c24fae75c11ea8e22551c650c3796')
+    conf_dict = experiment.load_configs('6f10a292e77211ea89d69979079dc3d6')
     experiment.configs(conf, conf_dict, 'run')
     experiment.add_pytorch_models(get_modules(conf))
-    experiment.load('9c8c24fae75c11ea8e22551c650c3796')
+    experiment.load('6f10a292e77211ea89d69979079dc3d6')
 
-    evaluator = Evaluator(conf.model, conf.text, conf.text.valid)
+    experiment.start()
+    evaluator = Evaluator(conf.model, conf.text, conf.text.valid, False)
     evaluator.eval()
 
 
