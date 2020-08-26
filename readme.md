@@ -14,6 +14,7 @@ This repo trains deep learning models on source code.
 6. Clone our [transformers repo](https://github.com/lab-ml/transformers).
  And create a symbolic link to `transformers` package inside it (or just copy the entire folder).
 6. Run `train.py` to train the model.
+ *Try changing hyper-parameters like model dimensions and number of layers*.
 7. Run `evaluate.py` to evaluate the model.
 8. Enjoy!
 
