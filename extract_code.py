@@ -4,10 +4,13 @@
 Parse all files and write to a single file
 """
 import os
+import string
 from pathlib import Path, PurePath
 from typing import List, NamedTuple
 
 from labml import logger, monit, lab
+
+PRINTABLE = set(string.printable)
 
 
 class _PythonFile(NamedTuple):
@@ -58,6 +61,8 @@ def _read_file(path: Path) -> str:
     """
     with open(str(path)) as f:
         content = f.read()
+
+    content = ''.join(filter(lambda x: x in PRINTABLE, content))
 
     return content
 
