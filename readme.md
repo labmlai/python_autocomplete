@@ -16,3 +16,6 @@ This repo trains deep learning models on source code.
 8. Enjoy!
 
 If you have any questions please open an issue on Github.
+
+Feel free to add interesting repos with lots of Python code to `download.py`.
+ Thank you.
