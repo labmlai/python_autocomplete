@@ -1,93 +1,28 @@
 from pathlib import PurePath
-from typing import Callable, List
+from typing import Callable
 
 import torch
 import torch.nn as nn
+
 from labml import lab, experiment, tracker, monit, logger
 from labml.configs import option
+from labml.helpers.pytorch.datasets.text import TextDataset, SequentialDataLoader
 from labml.helpers.pytorch.device import DeviceConfigs
 from labml.helpers.pytorch.module import Module
 from labml.helpers.pytorch.optimizer import OptimizerConfigs
 from labml.helpers.pytorch.train_valid import TrainValidConfigs, Mode
 from labml.logger import Text
 from labml.utils.pytorch import get_modules
-from torch.utils.data import IterableDataset
-
 from transformers import TransformerConfigs
 
 
-class TextDataset:
-    train: str
-    valid: str
-    standard_tokens: List[str] = []
-
-    @staticmethod
-    def load(path: PurePath):
-        with open(str(path), 'r') as f:
-            return f.read()
-
+class SourceCodeDataset(TextDataset):
     def __init__(self, path: PurePath, tokenizer: Callable):
-        self.tokenizer = tokenizer
-        self.path = path
-
         with monit.section("Load data"):
-            self.train = self.load(path / 'train.py')
-            self.valid = self.load(path / 'valid.py')
+            train = self.load(path / 'train.py')
+            valid = self.load(path / 'valid.py')
 
-        self.create_tokens()
-
-    def create_tokens(self):
-        self.n_tokens = len(self.standard_tokens)
-        self.stoi = {t: i for i, t in enumerate(self.standard_tokens)}
-
-        with monit.section("Tokenize"):
-            tokens = self.tokenizer(self.train + self.valid)
-            tokens = sorted(list(set(tokens)))
-
-        for t in monit.iterate("Build vocabulary", tokens):
-            self.stoi[t] = self.n_tokens
-            self.n_tokens += 1
-
-        self.itos = [''] * self.n_tokens
-        for t, n in self.stoi.items():
-            self.itos[n] = t
-
-    def text_to_i(self, text: str) -> torch.Tensor:
-        tokens = self.tokenizer(text)
-        return torch.tensor([self.stoi[s] for s in tokens], dtype=torch.long)
-
-    def __repr__(self):
-        return f'{len(self.train)}, {len(self.valid)} - {str(self.path)}'
-
-
-class SequentialDataLoader(IterableDataset):
-    def __init__(self, *, text: str, dataset: TextDataset,
-                 batch_size: int, seq_len: int):
-        self.seq_len = seq_len
-        data = dataset.text_to_i(text)
-        n_batch = data.shape[0] // batch_size
-        data = data.narrow(0, 0, n_batch * batch_size)
-        data = data.view(batch_size, -1).t().contiguous()
-        self.data = data
-        self.dataset = data.flatten()
-
-    def __len__(self):
-        return self.data.shape[0] // self.seq_len
-
-    def __iter__(self):
-        self.idx = 0
-        return self
-
-    def __next__(self):
-        if self.idx >= self.data.shape[0] - 1:
-            raise StopIteration()
-
-        seq_len = min(self.seq_len, self.data.shape[0] - 1 - self.idx)
-        i = self.idx + seq_len
-        data = self.data[self.idx: i]
-        target = self.data[self.idx + 1: i + 1]
-        self.idx = i
-        return data, target
+        super().__init__(path, tokenizer, train, valid, '')
 
 
 class Configs(TrainValidConfigs):
@@ -215,7 +150,7 @@ def character():
 
 @option(Configs.text)
 def source_code(c: Configs):
-    return TextDataset(lab.get_data_path(), c.tokenizer)
+    return SourceCodeDataset(lab.get_data_path(), c.tokenizer)
 
 
 @option(Configs.train_loader)
