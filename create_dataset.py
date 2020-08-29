@@ -48,11 +48,16 @@ class _GetPythonFiles:
         Recursively collect files
         """
         for p in path.iterdir():
+            if p.is_symlink():
+                p.unlink()
+                continue
             if p.is_dir():
                 self.get_python_files(p)
             else:
                 if p.suffix == '.py':
                     self.add_file(p)
+                else:
+                    p.unlink()
 
 
 def _read_file(path: Path) -> str:
