@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 import re
 import urllib.request
+import urllib.error
 from pathlib import Path
 from typing import Optional
 
@@ -45,7 +46,11 @@ def download_repo(org: str, repo: str, idx: Optional[int]):
     else:
         idx_str = ""
     with monit.section(f"{idx_str} {org}/{repo}") as s:
-        zip = urllib.request.urlopen(f'https://github.com/{org}/{repo}/archive/master.zip')
+        try:
+            zip = urllib.request.urlopen(f'https://github.com/{org}/{repo}/archive/master.zip')
+        except urllib.error.HTTPError as e:
+            print(e)
+            return
         content = zip.read()
 
         size = len(content) // 1024
