@@ -1,7 +1,7 @@
 import torch
 import torch.nn
 from labml import experiment, logger
-from labml.helpers.pytorch.module import Module
+from labml_helpers.module import Module
 from labml.logger import Text, Style
 from labml.utils.pytorch import get_modules
 

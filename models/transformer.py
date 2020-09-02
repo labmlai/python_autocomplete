@@ -3,8 +3,8 @@ import torch
 from torch import nn
 
 from labml import monit
-from labml.helpers.pytorch.module import Module
-from transformers import Encoder
+from labml_helpers.module import Module
+from labml_nn.transformers import Encoder
 
 
 class TransformerModel(Module):

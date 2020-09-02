@@ -1,6 +1,6 @@
 from torch import nn
 
-from labml.helpers.pytorch.module import Module
+from labml_helpers.module import Module
 
 
 class LstmModel(Module):

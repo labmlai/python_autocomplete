@@ -6,14 +6,14 @@ import torch.nn as nn
 
 from labml import lab, experiment, tracker, monit, logger
 from labml.configs import option
-from labml.helpers.pytorch.datasets.text import TextDataset, SequentialDataLoader
-from labml.helpers.pytorch.device import DeviceConfigs
-from labml.helpers.pytorch.module import Module
-from labml.helpers.pytorch.optimizer import OptimizerConfigs
-from labml.helpers.pytorch.train_valid import TrainValidConfigs, Mode
+from labml_helpers.datasets.text import TextDataset, SequentialDataLoader
+from labml_helpers.device import DeviceConfigs
+from labml_helpers.module import Module
+from labml_helpers.optimizer import OptimizerConfigs
+from labml_helpers.train_valid import TrainValidConfigs, Mode
 from labml.logger import Text
 from labml.utils.pytorch import get_modules
-from transformers import TransformerConfigs
+from labml_nn.transformers import TransformerConfigs
 
 
 class SourceCodeDataset(TextDataset):
