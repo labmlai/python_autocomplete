@@ -1,5 +1,5 @@
 labml
 torch
 numpy
-labml-helpers
-labml-nn
+labml-helpers>=0.4.2
+labml-nn>=0.4.1

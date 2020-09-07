@@ -3,16 +3,16 @@ from typing import Callable
 
 import torch
 import torch.nn as nn
-
 from labml import lab, experiment, tracker, monit, logger
 from labml.configs import option
+from labml.logger import Text
+from labml.utils.pytorch import get_modules
+
 from labml_helpers.datasets.text import TextDataset, SequentialDataLoader
 from labml_helpers.device import DeviceConfigs
 from labml_helpers.module import Module
 from labml_helpers.optimizer import OptimizerConfigs
 from labml_helpers.train_valid import TrainValidConfigs, Mode
-from labml.logger import Text
-from labml.utils.pytorch import get_modules
 from labml_nn.transformers import TransformerConfigs
 
 
@@ -32,11 +32,13 @@ class Configs(TrainValidConfigs):
     batch_size: int = 16
     seq_len: int = 512
     n_tokens: int
-    d_model: int = 512
     n_layers: int = 2
     dropout: float = 0.2
-    d_lstm: int = 512
+    d_model: int = 512
+    rnn_size: int = 512
+    rhn_depth: int = 1
     tokenizer: Callable
+    inner_iterations = 100
 
     is_save_models = True
 
@@ -56,13 +58,7 @@ class Configs(TrainValidConfigs):
 
             logger.log(log)
 
-            with Mode(is_train=True,
-                      is_log_parameters=self.is_log_parameters,
-                      is_log_activations=self.is_log_activations):
-                with tracker.namespace('train'):
-                    self.trainer()
-            with tracker.namespace('valid'):
-                self.validator()
+            self.run_step()
 
 
 class SimpleAccuracyFunc(Module):
@@ -123,8 +119,19 @@ def lstm_model(c: Configs):
     from models.lstm import LstmModel
     m = LstmModel(n_tokens=c.n_tokens,
                   embedding_size=c.d_model,
-                  lstm_size=c.d_lstm,
-                  lstm_layers=c.n_layers)
+                  hidden_size=c.rnn_size,
+                  n_layers=c.n_layers)
+    return m.to(c.device)
+
+
+@option(Configs.model)
+def rhn_model(c: Configs):
+    from models.highway import RhnModel
+    m = RhnModel(n_tokens=c.n_tokens,
+                 embedding_size=c.d_model,
+                 hidden_size=c.rnn_size,
+                 n_layers=c.n_layers,
+                 depth=c.rhn_depth)
     return m.to(c.device)
 
 
@@ -171,14 +178,15 @@ def train_loader(c: Configs):
 
 def main():
     conf = Configs()
-    conf.n_layers = 6
-    conf.seq_len = 512
-    conf.epochs = 1024
-    conf.model = 'transformer_model'
+    conf.n_layers = 2
+    conf.seq_len = 8
+    conf.batch_size = 2
+    conf.epochs = 32
+    conf.model = 'rhn_model'
     experiment.create(name="source_code",
-                      comment='lstm model')
+                      comment='rhn model')
     experiment.configs(conf, {
-        'optimizer.optimizer': 'Noam',
+        'optimizer.optimizer': 'Adam',
         'device.cuda_device': 0
     }, 'run')
     experiment.add_pytorch_models(get_modules(conf))

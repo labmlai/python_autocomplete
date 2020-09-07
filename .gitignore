@@ -7,3 +7,5 @@ __pycache__/
 logs/
 labml
 transformers
+labml_nn
+labml_helpers
