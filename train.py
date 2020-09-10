@@ -179,20 +179,21 @@ def train_loader(c: Configs):
 def main():
     conf = Configs()
     conf.n_layers = 2
-    conf.seq_len = 8
     conf.batch_size = 2
     conf.epochs = 32
-    conf.model = 'rhn_model'
+    # Assign one of transformer_mode, lstm_model, or rhn_model
+    conf.model = 'lstm_model'
     experiment.create(name="source_code",
-                      comment='rhn model')
+                      comment='lstm model')
     experiment.configs(conf, {
         'optimizer.optimizer': 'Adam',
-        'device.cuda_device': 0
+        'optimizer.learning_rate': 2.5e-4,
+        'device.cuda_device': 1
     }, 'run')
     experiment.add_pytorch_models(get_modules(conf))
     # experiment.load('d5ba7f56d88911eaa6629b54a83956dc')
-    experiment.start()
-    conf.run()
+    with experiment.start():
+        conf.run()
 
 
 if __name__ == '__main__':
