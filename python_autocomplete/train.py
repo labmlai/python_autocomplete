@@ -3,16 +3,17 @@ from typing import Callable
 
 import torch
 import torch.nn as nn
-from labml import lab, experiment, monit, logger
+
+from labml import lab, experiment, monit, logger, tracker
 from labml.configs import option
 from labml.logger import Text
 from labml.utils.pytorch import get_modules
-
 from labml_helpers.datasets.text import TextDataset, SequentialDataLoader
 from labml_helpers.device import DeviceConfigs
+from labml_helpers.metrics.accuracy import Accuracy
 from labml_helpers.module import Module
-from labml_helpers.optimizer import OptimizerConfigs
-from labml_helpers.train_valid import TrainValidConfigs
+from labml_helpers.train_valid import TrainValidConfigs, hook_model_outputs, BatchIndex
+from labml_nn.optimizers.configs import OptimizerConfigs
 from labml_nn.transformers import TransformerConfigs
 
 
@@ -26,7 +27,9 @@ class SourceCodeDataset(TextDataset):
 
 
 class Configs(TrainValidConfigs):
-    device = DeviceConfigs()
+    optimizer: torch.optim.Adam
+    device: torch.device = DeviceConfigs()
+
     model: Module
     text: TextDataset
     batch_size: int = 16
@@ -44,32 +47,50 @@ class Configs(TrainValidConfigs):
 
     transformer: TransformerConfigs
 
-    def run(self):
-        for _ in self.training_loop:
-            prompt = 'def train('
-            log = [(prompt, Text.subtle)]
-            for i in monit.iterate('Sample', 25):
-                data = self.text.text_to_i(prompt).unsqueeze(-1)
-                data = data.to(self.device)
-                output, *_ = self.model(data)
-                output = output.argmax(dim=-1).squeeze()
-                prompt += '' + self.text.itos[output[-1]]
-                log += [('' + self.text.itos[output[-1]], Text.value)]
+    accuracy_func = Accuracy()
+    loss_func: 'CrossEntropyLoss'
 
-            logger.log(log)
+    def init(self):
+        tracker.set_queue("loss.*", 20, True)
+        tracker.set_scalar("accuracy.*", True)
+        hook_model_outputs(self.mode, self.model, 'model')
+        self.state_modules = [self.accuracy_func]
 
-            self.run_step()
+    def step(self, batch: any, batch_idx: BatchIndex):
+        data, target = batch[0].to(self.device), batch[1].to(self.device)
 
+        if self.mode.is_train:
+            tracker.add_global_step(len(data))
 
-class SimpleAccuracyFunc(Module):
-    def __call__(self, output: torch.Tensor, target: torch.Tensor) -> int:
-        pred = output.argmax(dim=-1)
-        return pred.eq(target).sum().item() / target.shape[1]
+        with self.mode.update(is_log_activations=batch_idx.is_last):
+            output, *_ = self.model(data)
 
+        loss = self.loss_func(output, target)
+        self.accuracy_func(output, target)
+        tracker.add("loss.", loss)
 
-@option(Configs.accuracy_func)
-def simple_accuracy():
-    return SimpleAccuracyFunc()
+        if self.mode.is_train:
+            loss.backward()
+
+            self.optimizer.step()
+            if batch_idx.is_last:
+                tracker.add('model', self.model)
+            self.optimizer.zero_grad()
+
+        tracker.save()
+
+    def sample(self):
+        prompt = 'def train('
+        log = [(prompt, Text.subtle)]
+        for i in monit.iterate('Sample', 25):
+            data = self.text.text_to_i(prompt).unsqueeze(-1)
+            data = data.to(self.device)
+            output, *_ = self.model(data)
+            output = output.argmax(dim=-1).squeeze()
+            prompt += '' + self.text.itos[output[-1]]
+            log += [('' + self.text.itos[output[-1]], Text.value)]
+
+        logger.log(log)
 
 
 @option(Configs.transformer)
@@ -126,7 +147,7 @@ def lstm_model(c: Configs):
 
 @option(Configs.model)
 def rhn_model(c: Configs):
-    from python_autocomplete.models import RhnModel
+    from python_autocomplete.models.highway import RhnModel
     m = RhnModel(n_tokens=c.n_tokens,
                  embedding_size=c.d_model,
                  hidden_size=c.rnn_size,
@@ -137,7 +158,7 @@ def rhn_model(c: Configs):
 
 @option(Configs.model)
 def transformer_model(c: Configs):
-    from python_autocomplete.models import TransformerModel
+    from python_autocomplete.models.transformer import TransformerModel
     m = TransformerModel(n_tokens=c.n_tokens,
                          d_model=c.d_model,
                          encoder=c.transformer.encoder,
@@ -189,7 +210,7 @@ def main():
         'optimizer.optimizer': 'Adam',
         'optimizer.learning_rate': 2.5e-4,
         'device.cuda_device': 1
-    }, 'run')
+    })
     experiment.add_pytorch_models(get_modules(conf))
     # experiment.load('d5ba7f56d88911eaa6629b54a83956dc')
     with experiment.start():

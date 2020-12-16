@@ -94,7 +94,7 @@ class Evaluator:
                 continue
             else:
                 if next_char == self.text[i + 1]:
-                    logs.append((self.text[i + 1], Style.underline))
+                    logs.append((self.text[i + 1], [Text.success, Style.underline]))
                 else:
                     logs.append((self.text[i + 1], Text.subtle))
 
@@ -107,17 +107,17 @@ class Evaluator:
 
 def main():
     conf = Configs()
-    experiment.create(name="source_code_eval",
-                      comment='lstm model')
+    experiment.evaluate()
 
     # Replace this with your training experiment UUID
-    conf_dict = experiment.load_configs('6f10a292e77211ea89d69979079dc3d6')
-    experiment.configs(conf, conf_dict, 'run')
+    conf_dict = experiment.load_configs('8d16abcc3f6211ebb0be67ed81588441')
+    experiment.configs(conf, conf_dict)
     experiment.add_pytorch_models(get_modules(conf))
-    experiment.load('6f10a292e77211ea89d69979079dc3d6')
+    experiment.load('8d16abcc3f6211ebb0be67ed81588441')
 
     experiment.start()
-    evaluator = Evaluator(conf.model, conf.text, conf.text.valid, False)
+    from python_autocomplete.models.transformer import TransformerModel
+    evaluator = Evaluator(conf.model, conf.text, conf.text.valid, not isinstance(conf.model, TransformerModel))
     evaluator.eval()
 
 

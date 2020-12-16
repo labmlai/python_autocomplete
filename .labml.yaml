@@ -1,2 +1,0 @@
-check_repo_dirty: False
-web_api:  https://api.lab-ml.com/api/v1/track?labml_token=team-samples

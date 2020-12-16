@@ -13,20 +13,20 @@ from labml import logger, monit, lab
 PRINTABLE = set(string.printable)
 
 
-class _PythonFile(NamedTuple):
+class PythonFile(NamedTuple):
     relative_path: str
     project: str
     path: Path
 
 
-class _GetPythonFiles:
+class GetPythonFiles:
     """
     Get list of python files and their paths inside `data/source` folder
     """
 
     def __init__(self):
         self.source_path = Path(lab.get_data_path() / 'source')
-        self.files: List[_PythonFile] = []
+        self.files: List[PythonFile] = []
         self.get_python_files(self.source_path)
 
         logger.inspect([f.path for f in self.files])
@@ -36,28 +36,21 @@ class _GetPythonFiles:
         Add a file to the list of tiles
         """
         project = path.relative_to(self.source_path).parents
-        project = project[len(project) - 2]
-        relative_path = path.relative_to(self.source_path / project)
+        relative_path = path.relative_to(self.source_path / project[len(project) - 3])
 
-        self.files.append(_PythonFile(relative_path=str(relative_path),
-                                      project=str(project),
-                                      path=path))
+        self.files.append(PythonFile(relative_path=str(relative_path),
+                                     project=str(project[len(project) - 2]),
+                                     path=path))
 
     def get_python_files(self, path: Path):
         """
         Recursively collect files
         """
         for p in path.iterdir():
-            if p.is_symlink():
-                p.unlink()
-                continue
             if p.is_dir():
                 self.get_python_files(p)
             else:
-                if p.suffix == '.py':
-                    self.add_file(p)
-                else:
-                    p.unlink()
+                self.add_file(p)
 
 
 def _read_file(path: Path) -> str:
@@ -72,7 +65,7 @@ def _read_file(path: Path) -> str:
     return content
 
 
-def _load_code(path: PurePath, source_files: List[_PythonFile]):
+def _load_code(path: PurePath, source_files: List[PythonFile]):
     with open(str(path), 'w') as f:
         for i, source in monit.enum(f"Write {path.name}", source_files):
             f.write(f"# PROJECT: {source.project} FILE: {str(source.relative_path)}\n")
@@ -80,7 +73,7 @@ def _load_code(path: PurePath, source_files: List[_PythonFile]):
 
 
 def main():
-    source_files = _GetPythonFiles().files
+    source_files = GetPythonFiles().files
 
     np.random.shuffle(source_files)
 
