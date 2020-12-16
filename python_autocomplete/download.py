@@ -68,7 +68,7 @@ def download():
     get_awesome_pytorch()
     repos = get_repos('pytorch_awesome.md')
 
-    for i, r in monit.enum("Download", repos):
+    for i, r in monit.enum(f"Download {len(repos)} repos", repos):
         download_repo(r[0], r[1], i)
 
 

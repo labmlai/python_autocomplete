@@ -3,7 +3,7 @@ from typing import Callable
 
 import torch
 import torch.nn as nn
-from labml import lab, experiment, tracker, monit, logger
+from labml import lab, experiment, monit, logger
 from labml.configs import option
 from labml.logger import Text
 from labml.utils.pytorch import get_modules
@@ -12,7 +12,7 @@ from labml_helpers.datasets.text import TextDataset, SequentialDataLoader
 from labml_helpers.device import DeviceConfigs
 from labml_helpers.module import Module
 from labml_helpers.optimizer import OptimizerConfigs
-from labml_helpers.train_valid import TrainValidConfigs, Mode
+from labml_helpers.train_valid import TrainValidConfigs
 from labml_nn.transformers import TransformerConfigs
 
 
@@ -116,7 +116,7 @@ def _n_tokens(c: Configs):
 
 @option(Configs.model)
 def lstm_model(c: Configs):
-    from models.lstm import LstmModel
+    from python_autocomplete.models.lstm import LstmModel
     m = LstmModel(n_tokens=c.n_tokens,
                   embedding_size=c.d_model,
                   hidden_size=c.rnn_size,
@@ -126,7 +126,7 @@ def lstm_model(c: Configs):
 
 @option(Configs.model)
 def rhn_model(c: Configs):
-    from models.highway import RhnModel
+    from python_autocomplete.models import RhnModel
     m = RhnModel(n_tokens=c.n_tokens,
                  embedding_size=c.d_model,
                  hidden_size=c.rnn_size,
@@ -137,7 +137,7 @@ def rhn_model(c: Configs):
 
 @option(Configs.model)
 def transformer_model(c: Configs):
-    from models.transformer import TransformerModel
+    from python_autocomplete.models import TransformerModel
     m = TransformerModel(n_tokens=c.n_tokens,
                          d_model=c.d_model,
                          encoder=c.transformer.encoder,

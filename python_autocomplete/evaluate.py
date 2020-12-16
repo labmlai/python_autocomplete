@@ -5,7 +5,7 @@ from labml_helpers.module import Module
 from labml.logger import Text, Style
 from labml.utils.pytorch import get_modules
 
-from train import Configs, TextDataset
+from python_autocomplete.train import Configs, TextDataset
 
 
 class Predictor:

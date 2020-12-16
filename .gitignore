@@ -9,3 +9,4 @@ labml
 transformers
 labml_nn
 labml_helpers
+einops
