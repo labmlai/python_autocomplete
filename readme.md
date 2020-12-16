@@ -6,10 +6,10 @@ This repo trains deep learning models on source code.
 
 1. Clone this repo
 2. Install requirements from `requirements.txt`
-3. Download Github repos by running `download.py`.
+3. Download Github repos by running `python_autocomplete/download.py`.
  It downloads all the repos mentioned in
  [PyTorch awesome list](https://github.com/bharathgs/Awesome-pytorch-list).
-4. Run `extrat_downloads.sh` to extract the downloaded zip files to `data/source`.
+4. Run `python_autocomplete/extract_downloads.py` to extract the downloaded zip files to `data/source`.
  You can directly copy any python code to `data/source` to train on them.
 5. Run `create_dataset.py` to collect all python files.
  The collected code will be written to `data/train.py` and, `data/eval.py`.
