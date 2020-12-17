@@ -10,3 +10,6 @@ transformers
 labml_nn
 labml_helpers
 einops
+*.egg-info
+build
+dist
