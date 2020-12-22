@@ -1,3 +1,5 @@
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/lab-ml/python_autocomplete/blob/master/notebooks/autocomplete.ipynb)
+
 # Source Code Modeling
 
 This repo trains deep learning models on source code.
