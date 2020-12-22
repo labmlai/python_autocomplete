@@ -7,7 +7,6 @@ import torch.nn as nn
 from labml import lab, experiment, monit, logger, tracker
 from labml.configs import option
 from labml.logger import Text
-from labml.utils.pytorch import get_modules
 from labml_helpers.datasets.text import TextDataset, SequentialDataLoader
 from labml_helpers.device import DeviceConfigs
 from labml_helpers.metrics.accuracy import Accuracy
@@ -199,19 +198,19 @@ def train_loader(c: Configs):
 
 def main():
     conf = Configs()
-    conf.n_layers = 2
-    conf.batch_size = 2
-    conf.epochs = 32
     # Assign one of transformer_mode, lstm_model, or rhn_model
-    conf.model = 'lstm_model'
     experiment.create(name="source_code",
                       comment='lstm model')
     experiment.configs(conf, {
+        'model': 'lstm_model',
+        'n_layers': 2,
+        'batch_size': 2,
+        'epochs': 32,
         'optimizer.optimizer': 'Adam',
         'optimizer.learning_rate': 2.5e-4,
         'device.cuda_device': 1
     })
-    experiment.add_pytorch_models(get_modules(conf))
+    experiment.add_pytorch_models(model=conf.model)
     # experiment.load('d5ba7f56d88911eaa6629b54a83956dc')
     with experiment.start():
         conf.run()

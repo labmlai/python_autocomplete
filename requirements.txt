@@ -2,4 +2,4 @@ labml>=0.4.74
 torch
 numpy
 labml-helpers>=0.4.70
-labml-nn>=0.4.70
+labml-nn>=0.4.83
