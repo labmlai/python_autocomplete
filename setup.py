@@ -5,7 +5,7 @@ with open("readme.md", "r") as f:
 
 setuptools.setup(
     name='labml_python_autocomplete',
-    version='0.0.1',
+    version='0.0.3',
     author="Varuna Jayasiri",
     author_email="vpjayasiri@gmail.com",
     description="A simple model that learns to predict Python source code",

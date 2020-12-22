@@ -14,7 +14,6 @@ from typing import List, NamedTuple, Set
 from typing import Optional
 
 import numpy as np
-
 from labml import lab, monit
 from labml import logger
 from labml.internal.util import rm_tree
@@ -59,12 +58,10 @@ def get_python_files():
 
     _collect_python_files(source_path)
 
-    logger.inspect([f.path for f in files])
-
     return files
 
 
-def _read_file(path: Path) -> str:
+def read_file(path: Path) -> str:
     """
     Read a file
     """
@@ -76,11 +73,11 @@ def _read_file(path: Path) -> str:
     return content
 
 
-def _load_code(path: PurePath, source_files: List[PythonFile]):
+def concat_and_save(path: PurePath, source_files: List[PythonFile]):
     with open(str(path), 'w') as f:
         for i, source in monit.enum(f"Write {path.name}", source_files):
             f.write(f"# PROJECT: {source.project} FILE: {str(source.relative_path)}\n")
-            f.write(_read_file(source.path) + "\n")
+            f.write(read_file(source.path) + "\n")
 
 
 def get_repos_from_readme(filename: str):
@@ -227,8 +224,8 @@ def main():
     logger.inspect(source_files)
 
     train_valid_split = int(len(source_files) * 0.9)
-    _load_code(lab.get_data_path() / 'train.py', source_files[:train_valid_split])
-    _load_code(lab.get_data_path() / 'valid.py', source_files[train_valid_split:])
+    concat_and_save(lab.get_data_path() / 'train.py', source_files[:train_valid_split])
+    concat_and_save(lab.get_data_path() / 'valid.py', source_files[train_valid_split:])
 
 
 if __name__ == '__main__':
