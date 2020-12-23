@@ -67,6 +67,7 @@ class Configs(TrainValidConfigs):
 
         loss = self.loss_func(output, target)
         self.accuracy_func(output, target)
+        self.accuracy_func.track()
         tracker.add("loss.", loss)
 
         if self.mode.is_train:
@@ -243,7 +244,7 @@ def main():
         'valid_loader': 'shuffled_valid_loader'
     })
     experiment.add_pytorch_models(model=conf.model)
-    # experiment.load('d5ba7f56d88911eaa6629b54a83956dc')
+    # experiment.load('70df7f86450911eb887b25e3927208f3')
     with experiment.start():
         conf.run()
 
