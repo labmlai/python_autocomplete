@@ -3,11 +3,12 @@ from typing import Callable
 
 import torch
 import torch.nn as nn
+from torch.utils.data import DataLoader
 
 from labml import lab, experiment, monit, logger, tracker
 from labml.configs import option
 from labml.logger import Text
-from labml_helpers.datasets.text import TextDataset, SequentialDataLoader
+from labml_helpers.datasets.text import TextDataset, SequentialDataLoader, SequentialUnBatchedDataset
 from labml_helpers.device import DeviceConfigs
 from labml_helpers.metrics.accuracy import Accuracy
 from labml_helpers.module import Module
@@ -181,7 +182,7 @@ def source_code(c: Configs):
 
 
 @option(Configs.train_loader)
-def train_loader(c: Configs):
+def sequential_train_loader(c: Configs):
     return SequentialDataLoader(text=c.text.train,
                                 dataset=c.text,
                                 batch_size=c.batch_size,
@@ -189,11 +190,39 @@ def train_loader(c: Configs):
 
 
 @option(Configs.valid_loader)
-def train_loader(c: Configs):
+def sequential_valid_loader(c: Configs):
     return SequentialDataLoader(text=c.text.valid,
                                 dataset=c.text,
                                 batch_size=c.batch_size,
                                 seq_len=c.seq_len)
+
+
+def transpose_batch(batch):
+    transposed_data = list(zip(*batch))
+    src = torch.stack(transposed_data[0], 1)
+    tgt = torch.stack(transposed_data[1], 1)
+
+    return src, tgt
+
+
+@option(Configs.train_loader)
+def shuffled_train_loader(c: Configs):
+    return DataLoader(SequentialUnBatchedDataset(text=c.text.train,
+                                                 dataset=c.text,
+                                                 seq_len=c.seq_len),
+                      batch_size=c.batch_size,
+                      collate_fn=transpose_batch,
+                      shuffle=True)
+
+
+@option(Configs.valid_loader)
+def shuffled_valid_loader(c: Configs):
+    return DataLoader(SequentialUnBatchedDataset(text=c.text.valid,
+                                                 dataset=c.text,
+                                                 seq_len=c.seq_len),
+                      batch_size=c.batch_size,
+                      collate_fn=transpose_batch,
+                      shuffle=True)
 
 
 def main():
@@ -202,13 +231,16 @@ def main():
     experiment.create(name="source_code",
                       comment='lstm model')
     experiment.configs(conf, {
-        'model': 'lstm_model',
-        'n_layers': 2,
-        'batch_size': 2,
+        'model': 'transformer_model',
+        'n_layers': 6,
+        'batch_size': 12,
         'epochs': 32,
-        'optimizer.optimizer': 'Adam',
-        'optimizer.learning_rate': 2.5e-4,
-        'device.cuda_device': 1
+        'optimizer.optimizer': 'Noam',
+        'optimizer.learning_rate': 1.0,
+        'device.cuda_device': 0,
+        'seq_len': 512,
+        'train_loader': 'shuffled_train_loader',
+        'valid_loader': 'shuffled_valid_loader'
     })
     experiment.add_pytorch_models(model=conf.model)
     # experiment.load('d5ba7f56d88911eaa6629b54a83956dc')

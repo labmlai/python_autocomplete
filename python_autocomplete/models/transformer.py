@@ -22,7 +22,7 @@ class TransformerModel(Module):
         mask = np.triu(np.ones(attn_shape, dtype=np.uint8), k=1)
         return (torch.from_numpy(mask) == 0).unsqueeze(-1)
 
-    def forward(self, src):
+    def __call__(self, src):
         if self.src_mask is None or self.src_mask.size(0) != len(src):
             device = src.device
             mask = self.subsequent_mask(len(src)).to(device)

@@ -157,8 +157,11 @@ def extract_zip(file_path: Path, overwrite: bool = False):
                 rm_tree(repo_source)
             else:
                 return repo_source
-        with zipfile.ZipFile(file_path, 'r') as repo_zip:
-            repo_zip.extractall(repo_source)
+        try:
+            with zipfile.ZipFile(file_path, 'r') as repo_zip:
+                repo_zip.extractall(repo_source)
+        except zipfile.BadZipfile as e:
+            print(file_path, e)
 
         return repo_source
 
@@ -213,7 +216,7 @@ def progressive(overwrite: bool = False):
 
 def main():
     try:
-        progressive()
+        batch()
     except KeyboardInterrupt:
         pass
 
