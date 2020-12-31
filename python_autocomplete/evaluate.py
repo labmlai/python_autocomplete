@@ -3,9 +3,10 @@ from typing import List, Dict
 
 import torch
 import torch.nn
+from labml.utils.cache import cache
 from torch import nn
 
-from labml import experiment, logger
+from labml import experiment, logger, lab
 from labml.logger import Text, Style
 from labml.utils.pytorch import get_modules
 from labml_helpers.module import Module
@@ -191,16 +192,21 @@ def main():
     conf = Configs()
     experiment.evaluate()
 
-    run_uuid = '39b03a1e454011ebbaff2b26e3148b3d'
     # Replace this with your training experiment UUID
+    run_uuid = '39b03a1e454011ebbaff2b26e3148b3d'
+
     conf_dict = experiment.load_configs(run_uuid)
     experiment.configs(conf, conf_dict)
     experiment.add_pytorch_models(get_modules(conf))
     experiment.load(run_uuid)
 
     experiment.start()
-    predictor = Predictor(conf.model, conf.text.stoi, conf.text.itos)
-    evaluate(predictor, conf.text.valid[:1000])
+    predictor = Predictor(conf.model, cache('stoi', lambda: conf.text.stoi), cache('itos', lambda: conf.text.itos))
+    conf.model.eval()
+
+    with open(str(lab.get_data_path() / 'sample.py'), 'r') as f:
+        sample = f.read()
+    evaluate(predictor, sample)
 
 
 if __name__ == '__main__':

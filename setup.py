@@ -19,7 +19,7 @@ setuptools.setup(
                                                'labml_nn', 'labml_nn.*',
                                                'labml', 'labml.*',
                                                'test', 'test.*')),
-    install_requires=['labml>=0.4.83',
+    install_requires=['labml>=0.4.86',
                       'labml_helpers>=0.4.70',
                       'labml_nn>=0.4.70'
                       'torch',

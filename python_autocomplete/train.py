@@ -133,7 +133,8 @@ def _loss_func(c: Configs):
 
 @option(Configs.n_tokens)
 def _n_tokens(c: Configs):
-    return c.text.n_tokens
+    from labml.utils.cache import cache
+    return cache('n_tokens', lambda: c.text.n_tokens)
 
 
 @option(Configs.model)
