@@ -1,8 +1,22 @@
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/lab-ml/python_autocomplete/blob/master/notebooks/autocomplete.ipynb)
+# Python Autocomplete
 
-# Source Code Modeling
+[This](https://github.com/lab-ml/python_autocomplete) project try autocompleting python
+source code using LSTM or Transformer models.
 
-This repo trains deep learning models on source code.
+Training model: [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/lab-ml/python_autocomplete/blob/master/notebooks/train.ipynb)
+
+Evaluating trained model: [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/lab-ml/python_autocomplete/blob/master/notebooks/train.ipynb)
+
+It gives quite decent results by saving above 30% key strokes in most files,
+and close to 50% in some. We calculated key strokes saved by making a single (best)
+prediction and selecting it with a single key.
+
+The dataset we use is the python code found in repos linked in
+[Awesome-pytorch-list](https://github.com/bharathgs/Awesome-pytorch-list).
+We download all the repositories as zip files, extract them, remove non python files and split them
+randomly to build training and validation datasets.
+
+We train a character level model without any tokenization of the source code, since it's the simplest.
 
 ### Try it yourself
 
@@ -19,6 +33,21 @@ This repo trains deep learning models on source code.
  *Try changing hyper-parameters like model dimensions and number of layers*.
 5. Run `evaluate.py` to evaluate the model.
 
+You can also run the training notebook on Google Colab.
+
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/lab-ml/python_autocomplete/blob/master/notebooks/train.ipynb)
+ 
+### Sample
+
+Here's a sample evaluation of a trained transformer model.
+
+Colors:
+* <span style="color:yellow">yellow</span>: the token predicted is wrong and the user needs to type that character.
+* <span style="color:blue">blue</span>: the token predicted is correct and the user selects it with a special key press, such as TAB or ENTER.
+* <span style="color:green">green</span>: autocompleted characters based on the prediction
+
 <p align="center">
-  <img src="/python-autocomplete.png?raw=true" width="100%" title="Screenshot">
+  <img src="/images/python-autocomplete.png?raw=true" width="100%" title="Screenshot">
 </p>
+
+We are working on a simple extension for VSCode for demonstration.
