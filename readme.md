@@ -5,7 +5,7 @@ source code using LSTM or Transformer models.
 
 Training model: [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/lab-ml/python_autocomplete/blob/master/notebooks/train.ipynb)
 
-Evaluating trained model: [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/lab-ml/python_autocomplete/blob/master/notebooks/train.ipynb)
+Evaluating trained model: [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/lab-ml/python_autocomplete/blob/master/notebooks/evaluate.ipynb)
 
 It gives quite decent results by saving above 30% key strokes in most files,
 and close to 50% in some. We calculated key strokes saved by making a single (best)
