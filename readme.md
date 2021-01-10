@@ -1,3 +1,8 @@
+[![PyPI - Python Version](https://badge.fury.io/py/labml-python-autocomplete.svg)](https://badge.fury.io/py/labml-python-autocomplete)
+[![PyPI Status](https://pepy.tech/badge/labml)](https://pepy.tech/project/labml-python-autocomplete)
+[![Join Slack](https://img.shields.io/badge/slack-chat-green.svg?logo=slack)](https://join.slack.com/t/labforml/shared_invite/zt-egj9zvq9-Dl3hhZqobexgT7aVKnD14g/)
+[![Twitter](https://img.shields.io/twitter/follow/LabML1?style=social)](https://twitter.com/LabML1?ref_src=twsrc%5Etfw)
+
 # Python Autocomplete
 
 [This](https://github.com/lab-ml/python_autocomplete) project try autocompleting python
