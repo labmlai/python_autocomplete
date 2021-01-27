@@ -35,7 +35,9 @@ cd vscode_extension
 code .
 ```
 
-3. Run the extension 
+3. Start the server `python_autocomplete/serve.py`
+
+4. Run the extension 
 
 ```
 Run -> Start Debugging
@@ -43,7 +45,7 @@ Run -> Start Debugging
 
 This will open another VSCode editor window, with the extension
 
-4. Create or open a python file and start editing!
+5. Create or open a python file and start editing!
 
 <p align="center">
   <img src="/python-autocomplete.png?raw=true" width="100%" title="Screenshot">
