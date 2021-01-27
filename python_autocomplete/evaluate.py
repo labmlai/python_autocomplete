@@ -1,5 +1,5 @@
 import string
-from typing import List, Dict
+from typing import List, Dict, Set, Optional
 
 import torch
 import torch.nn
@@ -56,12 +56,13 @@ class Predictor:
         best = prediction.argmax(-1).squeeze().item()
         return self.itos[best]
 
-    def get_token(self, prompt: str) -> str:
+    def get_token(self, prompt: str, token_chars: Optional[Set[str]] = None) -> str:
         result = ''
-        alnum = set(string.ascii_letters + string.digits + ' ' + '\n' + '\r')
+        if token_chars is None:
+            token_chars = set(string.ascii_letters + string.digits + ' ' + '\n' + '\r')
         while True:
             next_char = self.get_next_char(prompt)
-            if len(result) > 2 and next_char not in alnum or (next_char.strip() == '' and result.strip() != ''):
+            if len(result) > 2 and next_char not in token_chars or (next_char.strip() == '' and result.strip() != ''):
                 if not result:
                     result += next_char
                 return result

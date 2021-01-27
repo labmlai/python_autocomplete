@@ -1,12 +1,16 @@
+import json
+import string
 import threading
 
 from flask import Flask, request, jsonify
 
-from labml import experiment
+from labml import experiment, monit
 from labml.utils.cache import cache
 from labml.utils.pytorch import get_modules
 from python_autocomplete.evaluate import Predictor
 from python_autocomplete.train import Configs
+
+TOKEN_CHARS = set(string.ascii_letters + string.digits + ' ' + '\n' + '\r' + '_')
 
 
 def get_predictor():
@@ -42,13 +46,16 @@ def autocomplete():
     if not prompt:
         return jsonify({'success': False})
 
-    acquired = lock.acquire(blocking=False)
-    if acquired:
-        res = predictor.get_token(prompt)
-        lock.release()
-        return jsonify({'success': True, 'prediction': res})
-    else:
-        return jsonify({'success': False})
+    with monit.section('Predict') as s:
+        acquired = lock.acquire(blocking=False)
+        if acquired:
+            res = predictor.get_token(prompt, token_chars=TOKEN_CHARS)
+            lock.release()
+            s.message = f'{json.dumps(prompt[-5:])} -> {json.dumps(res)}'
+            return jsonify({'success': True, 'prediction': res})
+        else:
+            monit.fail()
+            return jsonify({'success': False})
 
 
 if __name__ == '__main__':

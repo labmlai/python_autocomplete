@@ -1,0 +1,33 @@
+{
+	"name": "python-autocomplete",
+	"displayName": "Autocomplete Python (PyTorch) code with a transformer",
+	"version": "0.0.1",
+	"publisher": "vpj",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/lab-ml/python_autocomplete"
+	},
+	"bugs": {
+		"url": "https://github.com/lab-ml/python_autocomplete/issues"
+	},
+	"engines": {
+		"vscode": "^1.32.0"
+	},
+	"categories": [
+		"Other"
+	],
+	"activationEvents": [
+		"*"
+	],
+	"main": "./out/extension.js",
+	"scripts": {
+		"vscode:prepublish": "npm run compile",
+		"compile": "tsc -p ./",
+		"watch": "tsc -watch -p ./"
+	},
+	"devDependencies": {
+		"@types/node": "*",
+		"@types/vscode": "*",
+		"typescript": "*"
+	}
+}

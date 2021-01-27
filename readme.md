@@ -19,6 +19,32 @@ This repo trains deep learning models on source code.
  *Try changing hyper-parameters like model dimensions and number of layers*.
 5. Run `evaluate.py` to evaluate the model.
 
+### Trying the VSCode extension
+
+1. Install npm packages
+
+```shell
+cd vscode_extension
+npm install
+```
+
+2. Open the project in vscode
+
+```shell
+cd vscode_extension
+code .
+```
+
+3. Run the extension 
+
+```
+Run -> Start Debugging
+```
+
+This will open another VSCode editor window, with the extension
+
+4. Create or open a python file and start editing!
+
 <p align="center">
   <img src="/python-autocomplete.png?raw=true" width="100%" title="Screenshot">
 </p>
