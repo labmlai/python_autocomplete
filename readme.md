@@ -5,8 +5,9 @@
 
 # Python Autocomplete
 
-[This](https://github.com/lab-ml/python_autocomplete) project try autocompleting python source code using LSTM or
-Transformer models.
+This is a learning/demo project to show how deep learning can be used to auto complete Python code.
+You can experiment with LSTM and Transformer models.
+We also have built a simple VSCode extension to try out the trained models.
 
 Training
 model: [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/lab-ml/python_autocomplete/blob/master/notebooks/train.ipynb)
