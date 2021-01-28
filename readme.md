@@ -55,16 +55,16 @@ You need to have [Node.JS](https://nodejs.dev/) installed
 
 ```shell
 cd vscode_extension
-npm install
+npm install # This will install the NPM packages
 ```
 
 4. Start the server `python_autocomplete/serve.py`
 
-5. Open the project in [VSCode](https://code.visualstudio.com/)
+5. Open the extension project (folder) in [VSCode](https://code.visualstudio.com/)
 
 ```shell
 cd vscode_extension
-code .
+code . # This will open vscode_extension in VSCode
 ```
 
 If you don't have [VSCode command line launcher](https://code.visualstudio.com/docs/setup/mac#_launching-from-the-command-line)
