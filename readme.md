@@ -51,24 +51,28 @@ You can also run the training notebook on Google Colab.
 
 3. Install npm packages
 
+You need to have [Node.JS](https://nodejs.dev/) installed
+
 ```shell
 cd vscode_extension
 npm install
 ```
 
-4. Open the project in vscode
+4. Start the server `python_autocomplete/serve.py`
+
+5. Open the project in [VSCode](https://code.visualstudio.com/)
 
 ```shell
 cd vscode_extension
 code .
 ```
 
-5. Start the server `python_autocomplete/serve.py`
+Or you can start VSCode and open the project with `File > Open`
 
-6. Run the extension
+6. Run the extension from VSCode
 
 ```
-Run -> Start Debugging
+Run > Start Debugging
 ```
 
 This will open another VSCode editor window, with the extension
