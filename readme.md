@@ -67,7 +67,8 @@ cd vscode_extension
 code .
 ```
 
-Or you can start VSCode and open the project with `File > Open`
+If you don't have [VSCode command line launcher](https://code.visualstudio.com/docs/setup/mac#_launching-from-the-command-line)
+start VSCode and open the project with `File > Open`
 
 6. Run the extension from VSCode
 
