@@ -189,21 +189,33 @@ def complete(predictor: Predictor, text: str, completion: int):
     logger.log(logs)
 
 
-def main():
+def get_predictor():
     conf = Configs()
     experiment.evaluate()
 
-    # Replace this with your training experiment UUID
-    run_uuid = '39b03a1e454011ebbaff2b26e3148b3d'
+    # This will download a pretrained model checkpoint and some cached files.
+    # It will download the archive as `saved_checkpoint.tar.gz` and extract it.
+    #
+    # If you have a locally trained model load it directly with
+    # run_uuid = 'RUN_UUID'
+    # And for latest checkpoint
+    # checkpoint = None
+    run_uuid, checkpoint = experiment.load_bundle(
+        lab.get_path() / 'saved_checkpoint.tar.gz',
+        url='https://github.com/lab-ml/python_autocomplete/releases/download/0.0.4/transformer_checkpoint.tar.gz')
 
     conf_dict = experiment.load_configs(run_uuid)
     experiment.configs(conf, conf_dict)
     experiment.add_pytorch_models(get_modules(conf))
-    experiment.load(run_uuid)
+    experiment.load(run_uuid, checkpoint)
 
     experiment.start()
-    predictor = Predictor(conf.model, cache('stoi', lambda: conf.text.stoi), cache('itos', lambda: conf.text.itos))
     conf.model.eval()
+    return Predictor(conf.model, cache('stoi', lambda: conf.text.stoi), cache('itos', lambda: conf.text.itos))
+
+
+def main():
+    predictor = get_predictor()
 
     with open(str(lab.get_data_path() / 'sample.py'), 'r') as f:
         sample = f.read()

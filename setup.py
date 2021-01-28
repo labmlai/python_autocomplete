@@ -5,7 +5,7 @@ with open("readme.md", "r") as f:
 
 setuptools.setup(
     name='labml_python_autocomplete',
-    version='0.0.3',
+    version='0.0.4',
     author="Varuna Jayasiri",
     author_email="vpjayasiri@gmail.com",
     description="A simple model that learns to predict Python source code",
@@ -19,7 +19,7 @@ setuptools.setup(
                                                'labml_nn', 'labml_nn.*',
                                                'labml', 'labml.*',
                                                'test', 'test.*')),
-    install_requires=['labml>=0.4.86',
+    install_requires=['labml>=0.4.98',
                       'labml_helpers>=0.4.70',
                       'labml_nn>=0.4.70'
                       'torch',

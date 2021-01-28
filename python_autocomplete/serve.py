@@ -4,31 +4,10 @@ import threading
 
 from flask import Flask, request, jsonify
 
-from labml import experiment, monit
-from labml.utils.cache import cache
-from labml.utils.pytorch import get_modules
-from python_autocomplete.evaluate import Predictor
-from python_autocomplete.train import Configs
+from labml import monit
+from python_autocomplete.evaluate import get_predictor
 
 TOKEN_CHARS = set(string.ascii_letters + string.digits + ' ' + '\n' + '\r' + '_')
-
-
-def get_predictor():
-    conf = Configs()
-    experiment.evaluate()
-
-    # Replace this with your training experiment UUID
-    run_uuid = '39b03a1e454011ebbaff2b26e3148b3d'
-
-    conf_dict = experiment.load_configs(run_uuid)
-    experiment.configs(conf, conf_dict)
-    experiment.add_pytorch_models(get_modules(conf))
-    experiment.load(run_uuid)
-
-    experiment.start()
-    conf.model.eval()
-    return Predictor(conf.model, cache('stoi', lambda: conf.text.stoi), cache('itos', lambda: conf.text.itos))
-
 
 app = Flask('python_autocomplete')
 predictor = get_predictor()
