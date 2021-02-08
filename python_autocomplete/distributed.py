@@ -17,7 +17,7 @@ class Configs(Configs_):
         tracker.set_queue("loss.*", 20, True)
         tracker.set_scalar("accuracy.*", True)
         hook_model_outputs(self.mode, self.ddp_model, 'model')
-        self.state_modules = [self.accuracy_func]
+        self.state_modules = [self.accuracy]
 
     def step(self, batch: any, batch_idx: BatchIndex):
         data, target = batch[0].to(self.device), batch[1].to(self.device)
@@ -29,8 +29,8 @@ class Configs(Configs_):
             output, *_ = self.ddp_model(data)
 
         loss = self.loss_func(output, target)
-        self.accuracy_func(output, target)
-        self.accuracy_func.track()
+        self.accuracy(output, target)
+        self.accuracy.track()
         tracker.add("loss.", loss)
 
         if self.mode.is_train:

@@ -1,5 +1,5 @@
 from pathlib import PurePath
-from typing import Callable
+from typing import Callable, List, Dict
 
 import torch
 import torch.nn as nn
@@ -11,6 +11,7 @@ from labml.logger import Text
 from labml_helpers.datasets.text import TextDataset, SequentialDataLoader, SequentialUnBatchedDataset
 from labml_helpers.device import DeviceConfigs
 from labml_helpers.metrics.accuracy import Accuracy
+from labml_helpers.metrics.simple_state import SimpleStateModule
 from labml_helpers.module import Module
 from labml_helpers.train_valid import TrainValidConfigs, hook_model_outputs, BatchIndex
 from labml_nn.optimizers.configs import OptimizerConfigs
@@ -20,10 +21,15 @@ from labml_nn.transformers import TransformerConfigs
 class SourceCodeDataset(TextDataset):
     def __init__(self, path: PurePath, tokenizer: Callable):
         with monit.section("Load data"):
-            train = self.load(path / 'train.py')
-            valid = self.load(path / 'valid.py')
+            train = self.load(path / 'train.py')  # [:100000]
+            valid = self.load(path / 'valid.py')  # [:100000]
 
-        super().__init__(path, tokenizer, train, valid, '')
+        from labml.utils.cache import cache_get
+
+        super().__init__(path, tokenizer, train, valid, '',
+                         n_tokens=cache_get('n_tokens'),
+                         itos=cache_get('itos'),
+                         stoi=cache_get('stoi'))
 
 
 class Configs(TrainValidConfigs):
@@ -47,14 +53,23 @@ class Configs(TrainValidConfigs):
 
     transformer: TransformerConfigs
 
-    accuracy_func = Accuracy()
+    accuracy = Accuracy()
     loss_func: 'CrossEntropyLoss'
+
+    state_updater: 'StateUpdater'
+    state = SimpleStateModule()
+    mem_len: int = 512
+    grad_norm_clip: float = 1.0
+    is_token_by_token: bool = False
+
+    itos: List[str]
+    stoi: Dict[str, int]
 
     def init(self):
         tracker.set_queue("loss.*", 20, True)
         tracker.set_scalar("accuracy.*", True)
         hook_model_outputs(self.mode, self.model, 'model')
-        self.state_modules = [self.accuracy_func]
+        self.state_modules = [self.accuracy, self.state]
 
     def step(self, batch: any, batch_idx: BatchIndex):
         data, target = batch[0].to(self.device), batch[1].to(self.device)
@@ -63,16 +78,21 @@ class Configs(TrainValidConfigs):
             tracker.add_global_step(len(data))
 
         with self.mode.update(is_log_activations=batch_idx.is_last):
-            output, *_ = self.model(data)
+            state = self.state.get()
+            output, new_state = self.model(data, state)
+            state = self.state_updater(state, new_state)
+            self.state.set(state)
 
         loss = self.loss_func(output, target)
-        self.accuracy_func(output, target)
-        self.accuracy_func.track()
         tracker.add("loss.", loss)
+
+        self.accuracy(output, target)
+        self.accuracy.track()
 
         if self.mode.is_train:
             loss.backward()
 
+            torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=self.grad_norm_clip)
             self.optimizer.step()
             if batch_idx.is_last:
                 tracker.add('model', self.model)
@@ -83,13 +103,17 @@ class Configs(TrainValidConfigs):
     def sample(self):
         prompt = 'def train('
         log = [(prompt, Text.subtle)]
+        state = None
         for i in monit.iterate('Sample', 25):
             data = self.text.text_to_i(prompt).unsqueeze(-1)
             data = data.to(self.device)
-            output, *_ = self.model(data)
-            output = output.argmax(dim=-1).squeeze()
-            prompt += '' + self.text.itos[output[-1]]
-            log += [('' + self.text.itos[output[-1]], Text.value)]
+            output, new_state = self.model(data, state)
+            output = output.argmax(dim=-1).squeeze(1)
+            prompt += '' + self.itos[output[-1]]
+            if self.is_token_by_token:
+                prompt = prompt[-1:]
+            log += [('' + self.itos[output[-1]], Text.value)]
+            state = self.state_updater(state, new_state)
 
         logger.log(log)
 
@@ -137,6 +161,18 @@ def _n_tokens(c: Configs):
     return cache('n_tokens', lambda: c.text.n_tokens)
 
 
+@option(Configs.itos)
+def _itos(c: Configs):
+    from labml.utils.cache import cache
+    return cache('itos', lambda: c.text.itos)
+
+
+@option(Configs.stoi)
+def _stoi(c: Configs):
+    from labml.utils.cache import cache
+    return cache('stoi', lambda: c.text.stoi)
+
+
 @option(Configs.model)
 def lstm_model(c: Configs):
     from python_autocomplete.models.lstm import LstmModel
@@ -167,6 +203,55 @@ def transformer_model(c: Configs):
                          src_embed=c.transformer.src_embed)
 
     return m.to(c.device)
+
+
+@option(Configs.model)
+def transformer_xl_model(c: Configs):
+    from labml_nn.transformers.xl import RelativeMultiHeadAttention
+    from labml_nn.transformers.feed_forward import FeedForward
+    from labml_nn.transformers.xl import TransformerXL
+    from labml_nn.transformers.xl import TransformerXLLayer
+    from python_autocomplete.models.xl import TransformerXLModel
+    m = TransformerXLModel(c.n_tokens, c.d_model, TransformerXL(
+        TransformerXLLayer(d_model=c.d_model,
+                           self_attn=RelativeMultiHeadAttention(c.transformer.n_heads, c.d_model, c.dropout),
+                           feed_forward=FeedForward(c.d_model, c.transformer.ffn.d_ff, c.dropout),
+                           dropout_prob=c.dropout), c.n_layers))
+    return m.to(c.device)
+
+
+class StateUpdater:
+    def __call__(self, old_state, new_state):
+        return new_state
+
+
+class MemoryUpdater(StateUpdater):
+    def __init__(self, mem_len: int):
+        self.mem_len = mem_len
+
+    def __call__(self, old_mem, new_mem):
+        if self.mem_len == 0:
+            return []
+
+        if old_mem:
+            mem = [torch.cat((m, x), dim=0) for m, x in zip(old_mem, new_mem)]
+        else:
+            mem = new_mem
+
+        if len(mem[0]) > self.mem_len:
+            mem = [m[-self.mem_len:] for m in mem]
+
+        return mem
+
+
+@option(Configs.state_updater)
+def simple():
+    return StateUpdater()
+
+
+@option(Configs.state_updater)
+def transformer_memory(c: Configs):
+    return MemoryUpdater(c.mem_len)
 
 
 def character_tokenizer(x: str):
@@ -231,9 +316,10 @@ def main():
     conf = Configs()
     # Assign one of transformer_mode, lstm_model, or rhn_model
     experiment.create(name="source_code",
-                      comment='lstm model')
+                      comment='transformer xl model')
     experiment.configs(conf, {
-        'model': 'transformer_model',
+        # 'model': 'transformer_model',
+        'model': 'transformer_xl_model',
         'n_layers': 6,
         'batch_size': 12,
         'epochs': 32,
@@ -241,8 +327,11 @@ def main():
         'optimizer.learning_rate': 1.0,
         'device.cuda_device': 0,
         'seq_len': 512,
-        'train_loader': 'shuffled_train_loader',
-        'valid_loader': 'shuffled_valid_loader'
+        'is_token_by_token': True,
+        # 'train_loader': 'shuffled_train_loader',
+        # 'valid_loader': 'shuffled_valid_loader',
+        'train_loader': 'sequential_train_loader',
+        'valid_loader': 'sequential_valid_loader',
     })
     experiment.add_pytorch_models(model=conf.model)
     # experiment.load('70df7f86450911eb887b25e3927208f3')

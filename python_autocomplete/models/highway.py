@@ -1,10 +1,10 @@
 from torch import nn
 
-from labml_helpers.module import Module
 from labml_nn.recurrent_highway_networks import RHN
+from python_autocomplete.models import AutoregressiveModel
 
 
-class RhnModel(Module):
+class RhnModel(AutoregressiveModel):
     def __init__(self, *,
                  n_tokens: int,
                  embedding_size: int,
@@ -20,10 +20,10 @@ class RhnModel(Module):
                        depth=depth)
         self.fc = nn.Linear(hidden_size, n_tokens)
 
-    def __call__(self, x, s0=None):
+    def __call__(self, x, state=None):
         # shape of x is [seq, batch, feat]
         x = self.embedding(x)
-        out, s = self.rhn(x, s0)
+        out, s = self.rhn(x, state)
         logits = self.fc(out)
 
         return logits, s

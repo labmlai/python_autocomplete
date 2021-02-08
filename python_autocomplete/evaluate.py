@@ -211,7 +211,7 @@ def get_predictor():
 
     experiment.start()
     conf.model.eval()
-    return Predictor(conf.model, cache('stoi', lambda: conf.text.stoi), cache('itos', lambda: conf.text.itos))
+    return Predictor(conf.model, conf.stoi, conf.itos)
 
 
 def main():
