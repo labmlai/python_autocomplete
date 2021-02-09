@@ -60,6 +60,17 @@ class Predictor:
         best = prediction.argmax(-1).squeeze().item()
         return self.itos[best], state
 
+    def get_start_state(self, prompt: str):
+        assert prompt
+
+        if len(prompt) == 1:
+            return prompt, None
+        if not self.is_token_by_token:
+            return prompt, None
+
+        _, state = self.get_next_char(prompt[:-1], None)
+        return prompt[-1], state
+
     def get_token(self, prompt: str, token_chars: Optional[Set[str]], state: Any) -> Tuple[str, Any]:
         result = ''
         if token_chars is None:
