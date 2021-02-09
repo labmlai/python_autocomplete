@@ -335,6 +335,7 @@ def main():
     })
     experiment.add_pytorch_models(model=conf.model)
     # experiment.load('70df7f86450911eb887b25e3927208f3')
+    experiment.load('c45857026a2811eba16c27c69839e51f')
     with experiment.start():
         conf.run()
 

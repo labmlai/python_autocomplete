@@ -28,7 +28,7 @@ def autocomplete():
     with monit.section('Predict') as s:
         acquired = lock.acquire(blocking=False)
         if acquired:
-            res = predictor.get_token(prompt, token_chars=TOKEN_CHARS)
+            res, state = predictor.get_token(prompt, TOKEN_CHARS, None)
             lock.release()
             s.message = f'{json.dumps(prompt[-5:])} -> {json.dumps(res)}'
             return jsonify({'success': True, 'prediction': res})

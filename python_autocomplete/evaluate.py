@@ -1,33 +1,34 @@
 import string
-from typing import List, Dict, Set, Optional
+from typing import List, Dict, Set, Optional, Any, Tuple
 
+import numpy as np
 import torch
 import torch.nn
-from labml.utils.cache import cache
 from torch import nn
 
 from labml import experiment, logger, lab
 from labml.logger import Text, Style
 from labml.utils.pytorch import get_modules
 from labml_helpers.module import Module
-from python_autocomplete.train import Configs
+from python_autocomplete.train import Configs, StateUpdater
 
 
 class Predictor:
-    def __init__(self, model: Module, stoi: Dict[str, int], itos: List[str]):
+    def __init__(self, model: Module, stoi: Dict[str, int], itos: List[str], *,
+                 state_updater: StateUpdater,
+                 is_token_by_token: bool):
+        self.is_token_by_token = is_token_by_token
+        self.state_updater = state_updater
         self.stoi = stoi
         self.itos = itos
         self.model = model
-
-        # Initial state
-        self._state = None
 
         # For timing
         self.time_add = 0
         self.time_predict = 0
         self.time_check = 0
 
-    def _get_predictions(self, prompt: str) -> torch.Tensor:
+    def _get_predictions(self, prompt: str, state: Any) -> Tuple[torch.Tensor, Any]:
         prompt = prompt[-512:]
         data = torch.tensor([[self.stoi[c]] for c in prompt if c in self.stoi],
                             dtype=torch.long,
@@ -35,41 +36,46 @@ class Predictor:
 
         # Get predictions
         with torch.no_grad():
-            prediction, *_ = self.model(data)
+            prediction, new_state = self.model(data, state)
+
+        state = self.state_updater(state, new_state)
 
         # Final prediction
-        return prediction[-1, :, :]
+        return prediction[-1, :, :], state
 
-    def get_predictions(self, prompt: str) -> torch.Tensor:
-        prediction = self._get_predictions(prompt)
+    def get_predictions(self, prompt: str, state: Any) -> Tuple[np.ndarray, Any]:
+        prediction, state = self._get_predictions(prompt, state)
 
-        return prediction.detach().cpu().numpy()
+        return prediction.detach().cpu().numpy(), state
 
-    def get_probabilities(self, prompt: str) -> torch.Tensor:
+    def get_probabilities(self, prompt: str, state: Any) -> Tuple[np.ndarray, Any]:
         # Final prediction
-        prediction = nn.Softmax(-1)(self._get_predictions(prompt))
+        prediction, state = self._get_predictions(prompt, state)
+        prediction = nn.Softmax(-1)(prediction)
 
-        return prediction.detach().cpu().numpy()
+        return prediction.detach().cpu().numpy(), state
 
-    def get_next_char(self, prompt: str) -> str:
-        prediction = self.get_predictions(prompt)
+    def get_next_char(self, prompt: str, state: Any) -> Tuple[str, Any]:
+        prediction, state = self.get_predictions(prompt, state)
         best = prediction.argmax(-1).squeeze().item()
-        return self.itos[best]
+        return self.itos[best], state
 
-    def get_token(self, prompt: str, token_chars: Optional[Set[str]] = None) -> str:
+    def get_token(self, prompt: str, token_chars: Optional[Set[str]], state: Any) -> Tuple[str, Any]:
         result = ''
         if token_chars is None:
             token_chars = set(string.ascii_letters + string.digits + ' ' + '\n' + '\r')
         while True:
-            next_char = self.get_next_char(prompt)
+            next_char, state = self.get_next_char(prompt, state)
             if len(result) > 2 and next_char not in token_chars or (next_char.strip() == '' and result.strip() != ''):
                 if not result:
                     result += next_char
-                return result
+                return result, state
             result += next_char
             if len(result) > 20:
-                return result
+                return result, state
             prompt += next_char
+            if self.is_token_by_token:
+                prompt = prompt[-1:]
 
 
 def evaluate(predictor: Predictor, text: str):
@@ -82,7 +88,7 @@ def evaluate(predictor: Predictor, text: str):
     key_strokes = 0
 
     while i + 1 < len(text):
-        next_token = predictor.get_token(text[:i + 1])
+        next_token, state = predictor.get_token(text[:i + 1], None, None)
         if next_token == text[i + 1: i + 1 + len(next_token)]:
             correct += len(next_token)
             right = True
@@ -124,7 +130,8 @@ def anomalies(predictor: Predictor, text: str):
 
     while i + 1 < len(text):
         #             print(i, self.predictor.prompt)
-        preds = predictor.get_probabilities(text[:i + 1])[0, :]
+        preds, _ = predictor.get_probabilities(text[:i + 1], None)
+        preds = preds[0, :]
         c = text[i + 1]
 
         if c == '\n':
@@ -169,7 +176,7 @@ def complete(predictor: Predictor, text: str, completion: int):
         if len(text) > i + 1:
             c = text[i + 1]
         else:
-            c = predictor.get_next_char(text[:i + 1])
+            c, _ = predictor.get_next_char(text[:i + 1], None)
 
         if c == '\n':
             logger.log(logs)
@@ -200,9 +207,12 @@ def get_predictor():
     # run_uuid = 'RUN_UUID'
     # And for latest checkpoint
     # checkpoint = None
-    run_uuid, checkpoint = experiment.load_bundle(
-        lab.get_path() / 'saved_checkpoint.tar.gz',
-        url='https://github.com/lab-ml/python_autocomplete/releases/download/0.0.4/transformer_checkpoint.tar.gz')
+
+    run_uuid = 'c45857026a2811eba16c27c69839e51f'
+    checkpoint = None
+    # run_uuid, checkpoint = experiment.load_bundle(
+    #     lab.get_path() / 'saved_checkpoint.tar.gz',
+    #     url='https://github.com/lab-ml/python_autocomplete/releases/download/0.0.4/transformer_checkpoint.tar.gz')
 
     conf_dict = experiment.load_configs(run_uuid)
     experiment.configs(conf, conf_dict)
@@ -211,7 +221,9 @@ def get_predictor():
 
     experiment.start()
     conf.model.eval()
-    return Predictor(conf.model, conf.stoi, conf.itos)
+    return Predictor(conf.model, conf.stoi, conf.itos,
+                     state_updater=conf.state_updater,
+                     is_token_by_token=conf.is_token_by_token)
 
 
 def main():
