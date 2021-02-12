@@ -1,5 +1,6 @@
 import string
 from heapq import heappush, heappop
+from typing import List, Tuple
 
 from labml import lab, monit
 
@@ -25,33 +26,20 @@ class BPE:
         return itos
 
 
-class BPELearner:
-    def __init__(self, data: str):
-        self.data = data
+class Tokenizer:
+    def collect_words(self, data: str):
+        raise NotImplementedError
+
+    def get_words(self) -> Tuple[List[str], List[int]]:
+        raise NotImplementedError
+
+    def tokenize(self, data: str) -> List[str]:
+        raise NotImplementedError
+
+
+class SourceCodeTokenizer(Tokenizer):
+    def __init__(self):
         self.words = {}
-        self.heap = []
-        self.heap_modified = set()
-        self.char_itos = []
-        self.char_stoi = {}
-        self.bpe = []
-        self.word_codes = []
-        self.word_code_prev = {}
-        self.word_code_next = {}
-
-        self.counts = {}
-        self.locations = {}
-
-        self.collect_words()
-        self.build_vocab()
-        self.build_word_arrays()
-        self.collect_pairs()
-
-    def learn(self, merges: int):
-        for i in monit.iterate('BPE', merges):
-            while True:
-                res = self.merge_pair()
-                if res is not None:
-                    break
 
     def add_word(self, word):
         if not word:
@@ -62,28 +50,96 @@ class BPELearner:
         else:
             self.words[word] += 1
 
-    def collect_words(self):
+    def tokenize(self, data: str) -> List[str]:
         last_idx = 0
         is_id = False
+        res = []
 
-        for i, c in monit.enum('Collect words', self.data):
+        for i, c in monit.enum('Collect words', data):
             if c in ID_CHARS:
                 if not is_id:
-                    self.add_word(self.data[last_idx:i])
+                    if last_idx < i:
+                        res.append(data[last_idx:i])
                     last_idx = i
                     is_id = True
             else:
                 if is_id:
-                    self.add_word(self.data[last_idx:i])
+                    if last_idx < i:
+                        res.append(data[last_idx:i])
                     last_idx = i
                     is_id = False
 
-        self.add_word(self.data[last_idx:])
+        if last_idx < len(data):
+            res.append(data[last_idx:])
+
+        return res
+
+    def collect_words(self, data: str):
+        last_idx = 0
+        is_id = False
+
+        for i, c in monit.enum('Collect words', data):
+            if c in ID_CHARS:
+                if not is_id:
+                    self.add_word(data[last_idx:i])
+                    last_idx = i
+                    is_id = True
+            else:
+                if is_id:
+                    self.add_word(data[last_idx:i])
+                    last_idx = i
+                    is_id = False
+
+        self.add_word(data[last_idx:])
+
+    def get_words(self):
         words_list = [(f, w) for w, f in self.words.items()]
         words_list.sort(key=lambda x: -x[0])
 
-        self.words_list = [w for _, w in words_list]
-        self.word_freq = [f for f, _ in words_list]
+        return [w for _, w in words_list], [f for f, _ in words_list]
+
+
+class NoTokenizer(Tokenizer):
+    def __init__(self):
+        self.data = ''
+
+    def collect_words(self, data):
+        self.data += data
+
+    def get_words(self):
+        return [self.data], [1]
+
+    def tokenize(self, data: str) -> List[str]:
+        return [data]
+
+
+class BPELearner:
+    def __init__(self, words_list: List[str], word_freq: List[int]):
+        self.words_list = words_list
+        self.word_freq = word_freq
+
+        self.heap = []
+        self.heap_modified = set()
+        self.char_itos = []
+        self.char_stoi = {}
+        self.bpe = []
+        self.word_codes = []
+        self.word_code_prev = []
+        self.word_code_next = []
+
+        self.counts = {}
+        self.locations = {}
+
+        self.build_vocab()
+        self.build_word_arrays()
+        self.collect_pairs()
+
+    def learn(self, merges: int):
+        for i in monit.iterate('BPE', merges):
+            while True:
+                res = self.merge_pair()
+                if res is not None:
+                    break
 
     def build_vocab(self):
         vocab = set()
@@ -230,11 +286,14 @@ def main():
     with open(str(path), 'r') as f:
         data = f.read()[:100_000]
 
-    bpe = BPELearner(data)
+    tokenizer = SourceCodeTokenizer()
+    tokenizer.collect_words(data)
+
+    bpe = BPELearner(*tokenizer.get_words())
     bpe.learn(1000)
     print(len(bpe.bpe))
     print(bpe.bpe_itos()[len(bpe.char_itos):])
-    print(len(bpe.data), bpe.get_length())
+    print(len(data), bpe.get_length())
 
 
 if __name__ == '__main__':
