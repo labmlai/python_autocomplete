@@ -8,23 +8,50 @@ ID_CHARS = set(string.ascii_letters + string.digits + '_')
 
 class BPE:
     def __init__(self):
-        path = lab.get_data_path() / 'train.py'
+        self.char_itos = []
+        self.char_stoi = {}
+        self.bpe_itos = []
+        self.bpe = []
+        self.common = {}
 
-        with open(str(path), 'r') as f:
-            self.data = f.read()  # [:100_000]
+        self.bpe_itos = self.calc_bpe_itos()
 
+    def to_char_stoi(self, w: str):
+        return [self.char_stoi[c] for c in w]
+
+    def calc_bpe_itos(self):
+        itos = list(self.char_itos)
+        itos += [itos[p1] + itos[p2] for p1, p2 in self.bpe[len(self.char_itos):]]
+        return itos
+
+
+class BPELearner:
+    def __init__(self, data: str):
+        self.data = data
         self.words = {}
         self.heap = []
         self.heap_modified = set()
-        self.itos = []
-        self.vocab = {}
+        self.char_itos = []
+        self.char_stoi = {}
         self.bpe = []
-        self.word_codes = {}
+        self.word_codes = []
         self.word_code_prev = {}
         self.word_code_next = {}
 
         self.counts = {}
         self.locations = {}
+
+        self.collect_words()
+        self.build_vocab()
+        self.build_word_arrays()
+        self.collect_pairs()
+
+    def learn(self, merges: int):
+        for i in monit.iterate('BPE', merges):
+            while True:
+                res = self.merge_pair()
+                if res is not None:
+                    break
 
     def add_word(self, word):
         if not word:
@@ -52,32 +79,38 @@ class BPE:
                     is_id = False
 
         self.add_word(self.data[last_idx:])
+        words_list = [(f, w) for w, f in self.words.items()]
+        words_list.sort(key=lambda x: -x[0])
+
+        self.words_list = [w for _, w in words_list]
+        self.word_freq = [f for f, _ in words_list]
 
     def build_vocab(self):
         vocab = set()
-        for k in self.words:
+        for k in self.words_list:
             for c in k:
                 vocab.add(c)
 
-        self.itos = list(sorted(vocab))
-        self.vocab = {c: i for i, c in enumerate(self.itos)}
+        self.char_itos = list(sorted(vocab))
+        self.char_stoi = {c: i for i, c in enumerate(self.char_itos)}
 
-        self.bpe = [i for i in range(len(self.vocab))]
+        self.bpe = [i for i in range(len(self.char_stoi))]
+
+    def to_char_stoi(self, w: str):
+        return [self.char_stoi[c] for c in w]
+
+    @staticmethod
+    def default_next_pointers(length: int):
+        return [i + 1 for i in range(length - 1)] + [-1]
+
+    @staticmethod
+    def default_prev_pointers(length: int):
+        return [i - 1 for i in range(length)]
 
     def build_word_arrays(self):
-        words = {}
-        for k in self.words:
-            a = []
-            for c in k:
-                a.append(self.vocab[c])
-            words[k] = a
-
-        self.word_codes = words
-
-        for k, v in self.word_codes.items():
-            self.word_code_next[k] = [i + 1 for i in range(len(v))]
-            self.word_code_prev[k] = [i - 1 for i in range(len(v))]
-            self.word_code_next[k][-1] = -1
+        self.word_codes = [self.to_char_stoi(w) for w in self.words_list]
+        self.word_code_next = [self.default_next_pointers(len(w)) for w in self.word_codes]
+        self.word_code_prev = [self.default_prev_pointers(len(w)) for w in self.word_codes]
 
     def heap_add_all(self):
         for pair in self.heap_modified:
@@ -95,14 +128,14 @@ class BPE:
         if w not in self.locations[pair]:
             self.locations[pair][w] = set()
 
-        self.counts[pair] += self.words[w]
+        self.counts[pair] += self.word_freq[w]
         self.locations[pair][w].add(i)
 
         self.heap_modified.add(pair)
 
     def collect_pairs(self):
-        for w, v in monit.iterate('Collect pairs', self.word_codes.items()):
-            f = self.words[w]
+        for w, v in monit.enum('Collect pairs', self.word_codes):
+            f = self.word_freq[w]
 
             for i in range(len(v) - 1):
                 self.add_pair(w, i, i + 1)
@@ -114,12 +147,8 @@ class BPE:
         assert pair[0] != -1 and pair[1] != -1
         if pair not in self.counts:
             return
-        try:
-            self.locations[pair][w].remove(i)
-        except:
-            print(pair, f"|{w}|", i)
-            raise
-        self.counts[pair] -= self.words[w]
+        self.locations[pair][w].remove(i)
+        self.counts[pair] -= self.word_freq[w]
         self.heap_modified.add(pair)
 
     def merge_pair(self):
@@ -177,35 +206,36 @@ class BPE:
         return pair
 
     def bpe_itos(self):
-        itos = list(self.itos)
-        for p1, p2 in self.bpe[len(self.itos):]:
+        itos = list(self.char_itos)
+        for p1, p2 in self.bpe[len(self.char_itos):]:
             itos.append(itos[p1] + itos[p2])
 
         return itos
 
     def get_length(self):
         res = 0
-        for w, v in self.word_codes:
+        for w, v in enumerate(self.word_codes):
             cnt = 0
             for idx in v:
                 if idx != -1:
                     cnt += 1
-            res += cnt * self.words[w]
+            res += cnt * self.word_freq[w]
 
         return res
 
 
-if __name__ == '__main__':
-    bpe = BPE()
-    bpe.collect_words()
-    bpe.build_vocab()
-    bpe.build_word_arrays()
-    bpe.collect_pairs()
-    for i in monit.iterate('BPE', 1_000):
-        while True:
-            res = bpe.merge_pair()
-            if res is not None:
-                break
+def main():
+    path = lab.get_data_path() / 'train.py'
+
+    with open(str(path), 'r') as f:
+        data = f.read()[:100_000]
+
+    bpe = BPELearner(data)
+    bpe.learn(1000)
     print(len(bpe.bpe))
-    print(bpe.bpe_itos()[len(bpe.itos):])
+    print(bpe.bpe_itos()[len(bpe.char_itos):])
     print(len(bpe.data), bpe.get_length())
+
+
+if __name__ == '__main__':
+    main()
