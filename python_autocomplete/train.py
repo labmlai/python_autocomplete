@@ -16,6 +16,7 @@ from labml_helpers.module import Module
 from labml_helpers.train_valid import TrainValidConfigs, hook_model_outputs, BatchIndex
 from labml_nn.optimizers.configs import OptimizerConfigs
 from labml_nn.transformers import TransformerConfigs
+from python_autocomplete.bpe import BPE, SourceCodeTokenizer
 
 
 class SourceCodeDataset(TextDataset):
@@ -30,6 +31,23 @@ class SourceCodeDataset(TextDataset):
                          n_tokens=cache_get('n_tokens'),
                          itos=cache_get('itos'),
                          stoi=cache_get('stoi'))
+
+
+class BPESourceCodeDataset(TextDataset):
+    tokenizer: BPE
+
+    def __init__(self, path: PurePath, bpe: BPE):
+        with monit.section("Load data"):
+            train = self.load(path / 'train.py')  # [:1000_000]
+            valid = self.load(path / 'valid.py')  # [:1000_000]
+
+        super().__init__(path, bpe, train, valid, '',
+                         n_tokens=bpe.n_tokens,
+                         itos=bpe.itos,
+                         stoi=bpe.stoi)
+
+    def text_to_i(self, text: str) -> torch.Tensor:
+        return torch.tensor(self.tokenizer.encode(text))
 
 
 class Configs(TrainValidConfigs):
@@ -268,6 +286,22 @@ def source_code(c: Configs):
     return SourceCodeDataset(lab.get_data_path(), c.tokenizer)
 
 
+@option(Configs.text)
+def source_code_bpe(c: Configs):
+    from labml.utils.cache import cache_get
+    from python_autocomplete.bpe import BPEEnDe
+    bpe_cache = cache_get('bpe')
+
+    if bpe_cache:
+        bpe_en_de = BPEEnDe()
+        bpe_en_de.load(**bpe_cache)
+    else:
+        raise RuntimeError('BPE not cached')
+
+    tokenizer = BPE(bpe_en_de, SourceCodeTokenizer())
+    return BPESourceCodeDataset(lab.get_data_path(), tokenizer)
+
+
 @option(Configs.train_loader)
 def sequential_train_loader(c: Configs):
     return SequentialDataLoader(text=c.text.train,
@@ -316,10 +350,12 @@ def main():
     conf = Configs()
     # Assign one of transformer_mode, lstm_model, or rhn_model
     experiment.create(name="source_code",
-                      comment='transformer xl model')
+                      comment='bpe')
     experiment.configs(conf, {
-        # 'model': 'transformer_model',
-        'model': 'transformer_xl_model',
+        # 'text': 'source_code',
+        'text': 'source_code_bpe',
+        'model': 'transformer_model',
+        # 'model': 'transformer_xl_model',
         'n_layers': 6,
         'batch_size': 12,
         'epochs': 32,
@@ -327,15 +363,14 @@ def main():
         'optimizer.learning_rate': 1.0,
         'device.cuda_device': 0,
         'seq_len': 512,
-        'is_token_by_token': True,
-        # 'train_loader': 'shuffled_train_loader',
-        # 'valid_loader': 'shuffled_valid_loader',
-        'train_loader': 'sequential_train_loader',
-        'valid_loader': 'sequential_valid_loader',
+        'is_token_by_token': False,
+        'state_updater': 'simple',
+        'train_loader': 'shuffled_train_loader',
+        'valid_loader': 'shuffled_valid_loader',
+        # 'train_loader': 'sequential_train_loader',
+        # 'valid_loader': 'sequential_valid_loader',
     })
     experiment.add_pytorch_models(model=conf.model)
-    # experiment.load('70df7f86450911eb887b25e3927208f3')
-    experiment.load('c45857026a2811eba16c27c69839e51f')
     with experiment.start():
         conf.run()
 
