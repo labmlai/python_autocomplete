@@ -38,8 +38,8 @@ class BPESourceCodeDataset(TextDataset):
 
     def __init__(self, path: PurePath, bpe: BPE):
         with monit.section("Load data"):
-            train = self.load(path / 'train.py')  # [:1000_000]
-            valid = self.load(path / 'valid.py')  # [:1000_000]
+            train = self.load(path / 'train.py')  # [:100_000]
+            valid = self.load(path / 'valid.py')  # [:100_000]
 
         super().__init__(path, bpe, train, valid, '',
                          n_tokens=bpe.n_tokens,

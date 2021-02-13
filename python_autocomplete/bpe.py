@@ -58,6 +58,7 @@ class _BPEEncoder:
 
         while self.heap:
             _, idx, pair = heappop(self.heap)
+            self.merge(idx, pair)
 
         return [c for c in self.codes if c != -1]
 
@@ -111,7 +112,7 @@ class BPEEnDe:
     def calc(self):
         self.bpe_itos = self.calc_bpe_itos()
         self.bpe_stoi = {s: i for i, s in enumerate(self.bpe_itos)}
-        self.pairs = {(p[0], p[1]): c for c, p in enumerate(self.bpe) if isinstance(p, tuple)}
+        self.pairs = {(p[0], p[1]): c for c, p in enumerate(self.bpe) if not isinstance(p, int)}
 
         self.encoder = _BPEEncoder(self.pairs)
 
