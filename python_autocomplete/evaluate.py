@@ -6,7 +6,7 @@ import torch
 import torch.nn
 from torch import nn
 
-from labml import experiment, logger, lab
+from labml import experiment, logger, lab, monit
 from labml.logger import Text, Style
 from labml.utils.pytorch import get_modules
 from labml_helpers.module import Module
@@ -55,7 +55,7 @@ class Predictor:
 
         return prediction.detach().cpu().numpy(), state
 
-    def get_next_char(self, prompt: str, state: Any) -> Tuple[str, Any]:
+    def get_next_token(self, prompt: str, state: Any) -> Tuple[str, Any]:
         prediction, state = self.get_predictions(prompt, state)
         best = prediction.argmax(-1).squeeze().item()
         return self.itos[best], state
@@ -68,25 +68,26 @@ class Predictor:
         if not self.is_token_by_token:
             return prompt, None
 
-        _, state = self.get_next_char(prompt[:-1], None)
+        _, state = self.get_next_token(prompt[:-1], None)
         return prompt[-1], state
 
-    def get_token(self, prompt: str, token_chars: Optional[Set[str]], state: Any) -> Tuple[str, Any]:
+    def get_next_word(self, prompt: str, token_chars: Optional[Set[str]], state: Any) -> Tuple[str, Any]:
         result = ''
         if token_chars is None:
             token_chars = set(string.ascii_letters + string.digits + ' ' + '\n' + '\r')
         while True:
-            next_char, state = self.get_next_char(prompt, state)
-            if len(result) > 2 and next_char not in token_chars or (next_char.strip() == '' and result.strip() != ''):
+            next_token, state = self.get_next_token(prompt, state)
+            if len(result) > 2 and next_token not in token_chars or (next_token.strip() == '' and result.strip() != ''):
                 if not result:
-                    result += next_char
+                    result += next_token
                 return result, state
-            result += next_char
+            result += next_token
             if len(result) > 20:
                 return result, state
-            prompt += next_char
             if self.is_token_by_token:
-                prompt = prompt[-1:]
+                prompt = next_token
+            else:
+                prompt += next_token
 
 
 def evaluate(predictor: Predictor, text: str):
@@ -99,7 +100,7 @@ def evaluate(predictor: Predictor, text: str):
     key_strokes = 0
 
     while i + 1 < len(text):
-        next_token, state = predictor.get_token(text[:i + 1], None, None)
+        next_token, state = predictor.get_next_word(text[:i + 1], None, None)
         if next_token == text[i + 1: i + 1 + len(next_token)]:
             correct += len(next_token)
             right = True
@@ -187,7 +188,7 @@ def complete(predictor: Predictor, text: str, completion: int):
         if len(text) > i + 1:
             c = text[i + 1]
         else:
-            c, _ = predictor.get_next_char(text[:i + 1], None)
+            c, _ = predictor.get_next_token(text[:i + 1], None)
 
         if c == '\n':
             logger.log(logs)
@@ -219,7 +220,8 @@ def get_predictor():
     # And for latest checkpoint
     # checkpoint = None
 
-    run_uuid = 'c45857026a2811eba16c27c69839e51f'
+    run_uuid = '41dc02106d1611eb9ab213fdf628e807' # bpe
+    # run_uuid = 'c45857026a2811eba16c27c69839e51f'  # xl
     checkpoint = None
     # run_uuid, checkpoint = experiment.load_bundle(
     #     lab.get_path() / 'saved_checkpoint.tar.gz',
@@ -242,7 +244,8 @@ def main():
 
     with open(str(lab.get_data_path() / 'sample.py'), 'r') as f:
         sample = f.read()
-    evaluate(predictor, sample)
+    with monit.section('Evaluate'):
+        evaluate(predictor, sample)
 
 
 if __name__ == '__main__':
