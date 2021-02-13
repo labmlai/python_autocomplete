@@ -20,26 +20,40 @@ from python_autocomplete.bpe import BPE, SourceCodeTokenizer
 
 
 class SourceCodeDataset(TextDataset):
-    def __init__(self, path: PurePath, tokenizer: Callable):
-        with monit.section("Load data"):
-            train = self.load(path / 'train.py')  # [:100000]
-            valid = self.load(path / 'valid.py')  # [:100000]
+    def __init__(self, path: PurePath, tokenizer: Callable, dont_load: bool):
+        if not dont_load:
+            with monit.section("Load data"):
+                train = self.load(path / 'train.py')  # [:100000]
+                valid = self.load(path / 'valid.py')  # [:100000]
+        else:
+            train = ''
+            valid = ''
 
-        from labml.utils.cache import cache_get
+        from labml.utils.cache import cache_get, cache_set
 
         super().__init__(path, tokenizer, train, valid, '',
                          n_tokens=cache_get('n_tokens'),
                          itos=cache_get('itos'),
                          stoi=cache_get('stoi'))
 
+        cache_set(f'n_tokens', self.n_tokens)
+        cache_set(f'itos', self.itos)
+        cache_set(f'stoi', self.stoi)
+
 
 class BPESourceCodeDataset(TextDataset):
     tokenizer: BPE
 
-    def __init__(self, path: PurePath, bpe: BPE):
-        with monit.section("Load data"):
-            train = self.load(path / 'train.py')  # [:100_000]
-            valid = self.load(path / 'valid.py')  # [:100_000]
+    def __init__(self, path: PurePath, bpe: BPE, dont_load: bool):
+        if not dont_load:
+            with monit.section("Load data"):
+                train = self.load(path / 'train.py')  # [:100_000]
+                valid = self.load(path / 'valid.py')  # [:100_000]
+        else:
+            train = ''
+            valid = ''
+
+        self.is_silent = False
 
         super().__init__(path, bpe, train, valid, '',
                          n_tokens=bpe.n_tokens,
@@ -47,7 +61,7 @@ class BPESourceCodeDataset(TextDataset):
                          stoi=bpe.stoi)
 
     def text_to_i(self, text: str) -> torch.Tensor:
-        return torch.tensor(self.tokenizer.encode(text))
+        return torch.tensor(self.tokenizer.encode(text, is_silent=self.is_silent))
 
 
 class Configs(TrainValidConfigs):
@@ -80,10 +94,8 @@ class Configs(TrainValidConfigs):
     grad_norm_clip: float = 1.0
     is_token_by_token: bool = False
 
-    itos: List[str]
-    stoi: Dict[str, int]
-
     cache_name: str = ''
+    is_load_data: bool = True
 
     def init(self):
         tracker.set_queue("loss.*", 20, True)
@@ -129,10 +141,10 @@ class Configs(TrainValidConfigs):
             data = data.to(self.device)
             output, new_state = self.model(data, state)
             output = output.argmax(dim=-1).squeeze(1)
-            prompt += '' + self.itos[output[-1]]
+            prompt += '' + self.text.itos[output[-1]]
             if self.is_token_by_token:
                 prompt = prompt[-1:]
-            log += [('' + self.itos[output[-1]], Text.value)]
+            log += [('' + self.text.itos[output[-1]], Text.value)]
             state = self.state_updater(state, new_state)
 
         logger.log(log)
@@ -177,20 +189,7 @@ def _loss_func(c: Configs):
 
 @option(Configs.n_tokens)
 def _n_tokens(c: Configs):
-    from labml.utils.cache import cache
-    return cache(f'n_tokens{c.cache_name}', lambda: c.text.n_tokens)
-
-
-@option(Configs.itos)
-def _itos(c: Configs):
-    from labml.utils.cache import cache
-    return cache(f'itos{c.cache_name}', lambda: c.text.itos)
-
-
-@option(Configs.stoi)
-def _stoi(c: Configs):
-    from labml.utils.cache import cache
-    return cache(f'stoi{c.cache_name}', lambda: c.text.stoi)
+    return c.text.n_tokens
 
 
 @option(Configs.model)
@@ -285,7 +284,7 @@ def character():
 
 @option(Configs.text)
 def source_code(c: Configs):
-    return SourceCodeDataset(lab.get_data_path(), c.tokenizer)
+    return SourceCodeDataset(lab.get_data_path(), c.tokenizer, c.is_load_data)
 
 
 @option(Configs.text)
@@ -301,7 +300,7 @@ def source_code_bpe(c: Configs):
         raise RuntimeError('BPE not cached')
 
     tokenizer = BPE(bpe_en_de, SourceCodeTokenizer())
-    return BPESourceCodeDataset(lab.get_data_path(), tokenizer)
+    return BPESourceCodeDataset(lab.get_data_path(), tokenizer, c.is_load_data)
 
 
 @option(Configs.train_loader)
