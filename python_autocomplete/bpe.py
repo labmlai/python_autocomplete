@@ -26,11 +26,11 @@ class BPE:
     def stoi(self):
         return self.bpe.bpe_stoi
 
-    def encode(self, data: str):
-        words = self.tokenizer.tokenize(data)
+    def encode(self, data: str, *, is_silent: bool = False):
+        words = self.tokenizer.tokenize(data, is_silent=is_silent)
 
         res = []
-        for w in monit.iterate('Encode words', words):
+        for w in monit.iterate('Encode words', words, is_silent=is_silent):
             res += self.bpe.encode(w)
 
         return res
@@ -131,7 +131,7 @@ class BPEEnDe:
         if word in self.popular_words:
             return self.popular_words[word]
 
-        return self.encoder.encode([self.char_stoi[c] for c in word])
+        return self.encoder.encode([self.char_stoi[c] for c in word if c in self.char_stoi])
 
 
 class Tokenizer:
@@ -141,7 +141,7 @@ class Tokenizer:
     def get_words(self) -> Tuple[List[str], List[int]]:
         raise NotImplementedError
 
-    def tokenize(self, data: str) -> List[str]:
+    def tokenize(self, data: str, *, is_silent: bool = False) -> List[str]:
         raise NotImplementedError
 
 
@@ -158,12 +158,12 @@ class SourceCodeTokenizer(Tokenizer):
         else:
             self.words[word] += 1
 
-    def tokenize(self, data: str) -> List[str]:
+    def tokenize(self, data: str, *, is_silent: bool = False) -> List[str]:
         last_idx = 0
         is_id = False
         res = []
 
-        for i, c in monit.enum('Collect words', data):
+        for i, c in monit.enum('Collect words', data, is_silent=is_silent):
             if c in ID_CHARS:
                 if not is_id:
                     if last_idx < i:
@@ -217,7 +217,7 @@ class NoTokenizer(Tokenizer):
     def get_words(self):
         return [self.data], [1]
 
-    def tokenize(self, data: str) -> List[str]:
+    def tokenize(self, data: str, *, is_silent: bool = False) -> List[str]:
         return [data]
 
 
