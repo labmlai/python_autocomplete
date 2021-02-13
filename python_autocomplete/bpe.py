@@ -1,4 +1,5 @@
 import string
+from functools import lru_cache
 from heapq import heappush, heappop
 from typing import List, Tuple
 
@@ -125,6 +126,7 @@ class BPEEnDe:
             itos.append(itos[p1] + itos[p2])
         return itos
 
+    @lru_cache(1024)
     def encode(self, word: str):
         if word in self.popular_words:
             return self.popular_words[word]

@@ -83,6 +83,8 @@ class Configs(TrainValidConfigs):
     itos: List[str]
     stoi: Dict[str, int]
 
+    cache_name: str = ''
+
     def init(self):
         tracker.set_queue("loss.*", 20, True)
         tracker.set_scalar("accuracy.*", True)
@@ -176,19 +178,19 @@ def _loss_func(c: Configs):
 @option(Configs.n_tokens)
 def _n_tokens(c: Configs):
     from labml.utils.cache import cache
-    return cache('n_tokens', lambda: c.text.n_tokens)
+    return cache(f'n_tokens{c.cache_name}', lambda: c.text.n_tokens)
 
 
 @option(Configs.itos)
 def _itos(c: Configs):
     from labml.utils.cache import cache
-    return cache('itos', lambda: c.text.itos)
+    return cache(f'itos{c.cache_name}', lambda: c.text.itos)
 
 
 @option(Configs.stoi)
 def _stoi(c: Configs):
     from labml.utils.cache import cache
-    return cache('stoi', lambda: c.text.stoi)
+    return cache(f'stoi{c.cache_name}', lambda: c.text.stoi)
 
 
 @option(Configs.model)
@@ -352,6 +354,7 @@ def main():
     experiment.create(name="source_code",
                       comment='bpe')
     experiment.configs(conf, {
+        'cache_name': 'bpe',
         # 'text': 'source_code',
         'text': 'source_code_bpe',
         'model': 'transformer_model',
