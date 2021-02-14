@@ -16,7 +16,7 @@ class Tokenizer:
     stoi: Dict[str, int]
     is_trained: int
 
-    def encode(self, data: str, *, is_silent: bool = False):
+    def encode(self, data: str, *, is_silent: bool = True):
         raise NotImplementedError
 
     def train(self, data: str):
@@ -35,7 +35,7 @@ class CharacterTokenizer(Tokenizer):
         else:
             self.is_trained = not retrain
 
-    def encode(self, data: str, *, is_silent: bool = False):
+    def encode(self, data: str, *, is_silent: bool = True):
         return torch.tensor([self.stoi[c] for c in data if c in self.stoi], dtype=torch.long)
 
     def train(self, data: str):
@@ -91,7 +91,7 @@ class SourceCodeDataConfigs(BaseConfigs):
     seq_len: int
 
     def text_to_i(self, text: str, *, is_silent: bool = True) -> torch.Tensor:
-        return torch.tensor(self.tokenizer.encode(text, is_silent=is_silent))
+        return torch.tensor(self.tokenizer.encode(text, is_silent=is_silent), dtype=torch.long)
 
 
 @option(SourceCodeDataConfigs.dataset, 'default')
