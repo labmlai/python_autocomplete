@@ -1,14 +1,9 @@
-from pathlib import PurePath
-from typing import Callable, List, Dict
-
 import torch
 import torch.nn as nn
-from torch.utils.data import DataLoader
 
-from labml import lab, experiment, monit, logger, tracker
+from labml import experiment, monit, logger, tracker
 from labml.configs import option
 from labml.logger import Text
-from labml_helpers.datasets.text import TextDataset, SequentialDataLoader, SequentialUnBatchedDataset
 from labml_helpers.device import DeviceConfigs
 from labml_helpers.metrics.accuracy import Accuracy
 from labml_helpers.metrics.simple_state import SimpleStateModule
@@ -16,52 +11,7 @@ from labml_helpers.module import Module
 from labml_helpers.train_valid import TrainValidConfigs, hook_model_outputs, BatchIndex
 from labml_nn.optimizers.configs import OptimizerConfigs
 from labml_nn.transformers import TransformerConfigs
-from python_autocomplete.bpe import BPE, SourceCodeTokenizer
-
-
-class SourceCodeDataset(TextDataset):
-    def __init__(self, path: PurePath, tokenizer: Callable, dont_load: bool):
-        if not dont_load:
-            with monit.section("Load data"):
-                train = self.load(path / 'train.py')  # [:100000]
-                valid = self.load(path / 'valid.py')  # [:100000]
-        else:
-            train = ''
-            valid = ''
-
-        from labml.utils.cache import cache_get, cache_set
-
-        super().__init__(path, tokenizer, train, valid, '',
-                         n_tokens=cache_get('n_tokens'),
-                         itos=cache_get('itos'),
-                         stoi=cache_get('stoi'))
-
-        cache_set(f'n_tokens', self.n_tokens)
-        cache_set(f'itos', self.itos)
-        cache_set(f'stoi', self.stoi)
-
-
-class BPESourceCodeDataset(TextDataset):
-    tokenizer: BPE
-
-    def __init__(self, path: PurePath, bpe: BPE, dont_load: bool):
-        if not dont_load:
-            with monit.section("Load data"):
-                train = self.load(path / 'train.py')  # [:100_000]
-                valid = self.load(path / 'valid.py')  # [:100_000]
-        else:
-            train = ''
-            valid = ''
-
-        self.is_silent = False
-
-        super().__init__(path, bpe, train, valid, '',
-                         n_tokens=bpe.n_tokens,
-                         itos=bpe.itos,
-                         stoi=bpe.stoi)
-
-    def text_to_i(self, text: str) -> torch.Tensor:
-        return torch.tensor(self.tokenizer.encode(text, is_silent=self.is_silent))
+from python_autocomplete.dataset import SourceCodeDataConfigs
 
 
 class Configs(TrainValidConfigs):
@@ -69,16 +19,13 @@ class Configs(TrainValidConfigs):
     device: torch.device = DeviceConfigs()
 
     model: Module
-    text: TextDataset
-    batch_size: int = 16
-    seq_len: int = 512
+    text = SourceCodeDataConfigs()
     n_tokens: int
     n_layers: int = 2
     dropout: float = 0.2
     d_model: int = 512
     rnn_size: int = 512
     rhn_depth: int = 1
-    tokenizer: Callable
     inner_iterations = 100
 
     is_save_models = True
@@ -93,9 +40,6 @@ class Configs(TrainValidConfigs):
     mem_len: int = 512
     grad_norm_clip: float = 1.0
     is_token_by_token: bool = False
-
-    cache_name: str = ''
-    is_load_data: bool = True
 
     def init(self):
         tracker.set_queue("loss.*", 20, True)
@@ -141,10 +85,10 @@ class Configs(TrainValidConfigs):
             data = data.to(self.device)
             output, new_state = self.model(data, state)
             output = output.argmax(dim=-1).squeeze(1)
-            prompt += '' + self.text.itos[output[-1]]
+            prompt += '' + self.text.tokenizer.itos[output[-1]]
             if self.is_token_by_token:
                 prompt = prompt[-1:]
-            log += [('' + self.text.itos[output[-1]], Text.value)]
+            log += [('' + self.text.tokenizer.itos[output[-1]], Text.value)]
             state = self.state_updater(state, new_state)
 
         logger.log(log)
@@ -189,7 +133,7 @@ def _loss_func(c: Configs):
 
 @option(Configs.n_tokens)
 def _n_tokens(c: Configs):
-    return c.text.n_tokens
+    return c.text.tokenizer.n_tokens
 
 
 @option(Configs.model)
@@ -273,78 +217,14 @@ def transformer_memory(c: Configs):
     return MemoryUpdater(c.mem_len)
 
 
-def character_tokenizer(x: str):
-    return list(x)
-
-
-@option(Configs.tokenizer)
-def character():
-    return character_tokenizer
-
-
-@option(Configs.text)
-def source_code(c: Configs):
-    return SourceCodeDataset(lab.get_data_path(), c.tokenizer, c.is_load_data)
-
-
-@option(Configs.text)
-def source_code_bpe(c: Configs):
-    from labml.utils.cache import cache_get
-    from python_autocomplete.bpe import BPEEnDe
-    bpe_cache = cache_get('bpe')
-
-    if bpe_cache:
-        bpe_en_de = BPEEnDe()
-        bpe_en_de.load(**bpe_cache)
-    else:
-        raise RuntimeError('BPE not cached')
-
-    tokenizer = BPE(bpe_en_de, SourceCodeTokenizer())
-    return BPESourceCodeDataset(lab.get_data_path(), tokenizer, c.is_load_data)
-
-
 @option(Configs.train_loader)
-def sequential_train_loader(c: Configs):
-    return SequentialDataLoader(text=c.text.train,
-                                dataset=c.text,
-                                batch_size=c.batch_size,
-                                seq_len=c.seq_len)
+def _train_loader(c: Configs):
+    return c.text.train_loader
 
 
 @option(Configs.valid_loader)
-def sequential_valid_loader(c: Configs):
-    return SequentialDataLoader(text=c.text.valid,
-                                dataset=c.text,
-                                batch_size=c.batch_size,
-                                seq_len=c.seq_len)
-
-
-def transpose_batch(batch):
-    transposed_data = list(zip(*batch))
-    src = torch.stack(transposed_data[0], 1)
-    tgt = torch.stack(transposed_data[1], 1)
-
-    return src, tgt
-
-
-@option(Configs.train_loader)
-def shuffled_train_loader(c: Configs):
-    return DataLoader(SequentialUnBatchedDataset(text=c.text.train,
-                                                 dataset=c.text,
-                                                 seq_len=c.seq_len),
-                      batch_size=c.batch_size,
-                      collate_fn=transpose_batch,
-                      shuffle=True)
-
-
-@option(Configs.valid_loader)
-def shuffled_valid_loader(c: Configs):
-    return DataLoader(SequentialUnBatchedDataset(text=c.text.valid,
-                                                 dataset=c.text,
-                                                 seq_len=c.seq_len),
-                      batch_size=c.batch_size,
-                      collate_fn=transpose_batch,
-                      shuffle=True)
+def _valid_loader(c: Configs):
+    return c.text.valid_loader
 
 
 def main():
@@ -353,24 +233,21 @@ def main():
     experiment.create(name="source_code",
                       comment='bpe')
     experiment.configs(conf, {
-        'cache_name': 'bpe',
-        # 'text': 'source_code',
-        'text': 'source_code_bpe',
         'model': 'transformer_model',
         # 'model': 'transformer_xl_model',
         'n_layers': 6,
-        'batch_size': 12,
         'epochs': 32,
         'optimizer.optimizer': 'Noam',
         'optimizer.learning_rate': 1.0,
         'device.cuda_device': 0,
-        'seq_len': 512,
         'is_token_by_token': False,
         'state_updater': 'simple',
-        'train_loader': 'shuffled_train_loader',
-        'valid_loader': 'shuffled_valid_loader',
-        # 'train_loader': 'sequential_train_loader',
-        # 'valid_loader': 'sequential_valid_loader',
+
+        'text.is_shuffle': True,
+        'text.tokenizer': 'bpe',
+        'text.batch_size': 12,
+        'text.seq_len': 512,
+        'inner_iterations': 10,
     })
     experiment.add_pytorch_models(model=conf.model)
     with experiment.start():
