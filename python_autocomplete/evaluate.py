@@ -1,7 +1,6 @@
-import string
-from typing import Set, Optional, Any, Tuple
+from heapq import heappush, heappop
+from typing import Any, Tuple, List, Optional, NamedTuple
 
-import numpy as np
 import torch
 import torch.nn
 from torch import nn
@@ -10,8 +9,132 @@ from labml import experiment, logger, lab, monit
 from labml.logger import Text, Style
 from labml.utils.pytorch import get_modules
 from labml_helpers.module import Module
-from python_autocomplete.dataset import Tokenizer
+from python_autocomplete.dataset import Tokenizer, ID_CHARS
 from python_autocomplete.train import Configs, StateUpdater
+
+
+class PredictionComplete:
+    def __call__(self, text, token_str: str):
+        raise NotImplementedError
+
+
+class NextWordPredictionComplete(PredictionComplete):
+    def __init__(self, prompt: str):
+        self.is_id = False
+        if prompt and prompt[-1] in ID_CHARS:
+            self.is_id = True
+
+    def __call__(self, text, token_str: str):
+        prediction = set(token_str)
+        intersection = prediction.intersection(ID_CHARS)
+        is_id = intersection and intersection == prediction
+        is_not_id = intersection != prediction
+        if is_id and is_not_id:
+            return True
+        return is_id == self.is_id
+
+
+class BeamSearch:
+    def __init__(self, beam_size: int, prediction_complete: PredictionComplete,
+                 max_beam_size: int, rest: str,
+                 state_updater: 'StateUpdater',
+                 probs: Optional[List[float]],
+                 is_token_by_token: bool):
+        self.is_token_by_token = is_token_by_token
+        self.state_updater = state_updater
+        self.prediction_complete = prediction_complete
+        self.max_beam_size = max_beam_size
+        self.rest = rest
+
+        if probs is None:
+            probs = [1 / beam_size] * beam_size
+        assert len(probs) == beam_size
+        self.probs = probs
+
+        self.result_heap = []
+        self.text = [''] * beam_size
+        self.beam_heap = []
+
+    @staticmethod
+    def is_substr(original, token_str):
+        if not original:
+            return True
+
+        n = min(len(original), len(token_str))
+        return original[:n] == token_str[:n]
+
+    def add_prediction(self, prob: float, beam_idx: int, token_str: str, state):
+        if len(self.result_heap) == self.max_beam_size:
+            if self.result_heap[0][0] > prob:
+                return
+            heappop(self.result_heap)
+
+        state = self.state_updater.get_from_batch(state, beam_idx)
+        text = self.text[beam_idx] + token_str
+        heappush(self.result_heap, (prob, (text, state)))
+
+    def add_beam(self, prob: float, beam_idx: int, token: int):
+        if self.result_heap and self.result_heap[0][0] > prob:
+            return
+
+        if len(self.beam_heap) == self.max_beam_size:
+            if self.beam_heap[0][0] > prob:
+                return
+            heappop(self.beam_heap)
+
+        heappush(self.beam_heap, (prob, (beam_idx, token)))
+
+    def next_batch(self, prompt: torch.Tensor, state: Any, itos: List[str]):
+        if not self.beam_heap:
+            return None, None
+
+        new_prompt = []
+        new_state = []
+
+        texts = self.text
+        self.text = []
+        self.probs = []
+
+        for prob, (b, token) in self.beam_heap:
+            token = prompt.new_tensor([token])
+            if self.is_token_by_token:
+                new_prompt.append(token)
+            else:
+                new_prompt.append(torch.cat((prompt[1:, b], token)))
+            new_state.append(self.state_updater.get_from_batch(state, b))
+            self.probs.append(prob)
+            self.text.append(texts[b] + itos[token])
+
+        new_prompt = torch.stack(new_prompt, dim=1)
+        new_state = self.state_updater.make_batch(new_state)
+
+        self.beam_heap = []
+
+        return new_prompt, new_state
+
+    def update(self, next_token, itos: List[str], state):
+        self.beam_heap = []
+
+        for b, text in enumerate(self.text):
+            text = self.text[b]
+            if len(text) >= len(self.rest):
+                check_rest = None
+            else:
+                check_rest = self.rest[len(text):]
+
+            for token, token_str in enumerate(itos):
+                if not self.is_substr(check_rest, token_str):
+                    continue
+
+                if self.prediction_complete(text, token_str):
+                    self.add_prediction(self.probs[b] * next_token[b][token].item(), b, token_str, state)
+                self.add_beam(self.probs[b] * next_token[b][token].item(), b, token)
+
+
+class Prediction(NamedTuple):
+    prob: float
+    text: str
+    state: Any
 
 
 class Predictor:
@@ -28,65 +151,41 @@ class Predictor:
         self.time_predict = 0
         self.time_check = 0
 
-    def _get_predictions(self, prompt: str, state: Any) -> Tuple[torch.Tensor, Any]:
-        data = torch.tensor(self.tokenizer.encode(prompt),
-                            dtype=torch.long,
-                            device=self.model.device)[-512:].unsqueeze(-1)
+    def _get_predictions(self, prompt: torch.Tensor, state: Any) -> Tuple[torch.Tensor, Any]:
+        if prompt.shape[0] == 0:
+            return prompt.new_ones(prompt.shape[1], len(self.tokenizer.itos)) / len(self.tokenizer.itos), state
+        prompt = prompt.to(self.model.device)
 
         # Get predictions
         with torch.no_grad():
-            prediction, new_state = self.model(data, state)
+            prediction, new_state = self.model(prompt, state)
 
         state = self.state_updater(state, new_state)
+        prediction = nn.Softmax(-1)(prediction[-1])
 
         # Final prediction
-        return prediction[-1, :, :], state
+        return prediction, state
 
-    def get_predictions(self, prompt: str, state: Any) -> Tuple[np.ndarray, Any]:
-        prediction, state = self._get_predictions(prompt, state)
+    def get_next_word(self, prompt: torch.Tensor, state: Any, rest: str, probs: List[float],
+                      prediction_complete: PredictionComplete,
+                      max_beam_size: int) -> \
+            List[Prediction]:
+        beam = BeamSearch(prompt.shape[1], prediction_complete, max_beam_size, rest, self.state_updater,
+                          probs, self.is_token_by_token)
 
-        return prediction.detach().cpu().numpy(), state
+        for _ in range(10):
+            next_token, state = self._get_predictions(prompt, state)
+            beam.update(next_token, self.tokenizer.itos, state)
+            prompt, state = beam.next_batch(prompt, state, self.tokenizer.itos)
 
-    def get_probabilities(self, prompt: str, state: Any) -> Tuple[np.ndarray, Any]:
-        # Final prediction
-        prediction, state = self._get_predictions(prompt, state)
-        prediction = nn.Softmax(-1)(prediction)
+            if prompt is None:
+                break
 
-        return prediction.detach().cpu().numpy(), state
+        results = [Prediction(r[0], r[1][0], r[1][1]) for r in beam.result_heap]
+        return results
 
-    def get_next_token(self, prompt: str, state: Any) -> Tuple[str, Any]:
-        prediction, state = self.get_predictions(prompt, state)
-        best = prediction.argmax(-1).squeeze().item()
-        return self.tokenizer.itos[best], state
-
-    def get_start_state(self, prompt: str):
-        assert prompt
-
-        if len(prompt) == 1:
-            return prompt, None
-        if not self.is_token_by_token:
-            return prompt, None
-
-        _, state = self.get_next_token(prompt[:-1], None)
-        return prompt[-1], state
-
-    def get_next_word(self, prompt: str, token_chars: Optional[Set[str]], state: Any) -> Tuple[str, Any]:
-        result = ''
-        if token_chars is None:
-            token_chars = set(string.ascii_letters + string.digits + ' ' + '\n' + '\r')
-        while True:
-            next_token, state = self.get_next_token(prompt, state)
-            if len(result) > 2 and next_token not in token_chars or (next_token.strip() == '' and result.strip() != ''):
-                if not result:
-                    result += next_token
-                return result, state
-            result += next_token
-            if len(result) > 20:
-                return result, state
-            if self.is_token_by_token:
-                prompt = next_token
-            else:
-                prompt += next_token
+    def rstrip(self, prompt: str) -> Tuple[str, List[int]]:
+        return self.tokenizer.rstrip(prompt)
 
 
 def evaluate(predictor: Predictor, text: str):
@@ -95,12 +194,23 @@ def evaluate(predictor: Predictor, text: str):
 
     correct = 0
     i = 0
-    right = False
     key_strokes = 0
 
     while i + 1 < len(text):
-        next_token, state = predictor.get_next_word(text[:i + 1], None, None)
-        if next_token == text[i + 1: i + 1 + len(next_token)]:
+        prefix = text[:i + 1]
+        stripped, prompt = predictor.rstrip(prefix)
+        rest = prefix[len(stripped):]
+        prediction_complete = NextWordPredictionComplete(stripped)
+        prompt = torch.tensor(prompt, dtype=torch.long).unsqueeze(-1)
+
+        predictions = predictor.get_next_word(prompt, None, rest, [1.], prediction_complete, 5)
+        predictions.sort(key=lambda x: -x[0])
+        if predictions:
+            next_token = predictions[0].text[len(rest):]
+        else:
+            next_token = ''
+
+        if next_token and next_token == text[i + 1: i + 1 + len(next_token)]:
             correct += len(next_token)
             right = True
         else:
@@ -141,7 +251,7 @@ def anomalies(predictor: Predictor, text: str):
 
     while i + 1 < len(text):
         #             print(i, self.predictor.prompt)
-        preds, _ = predictor.get_probabilities(text[:i + 1], None)
+        preds, _ = predictor.get_predictions(text[:i + 1], None, calc_probs=True)
         preds = preds[0, :]
         c = text[i + 1]
 
@@ -207,7 +317,7 @@ def complete(predictor: Predictor, text: str, completion: int):
     logger.log(logs)
 
 
-def get_predictor():
+def get_predictor() -> Predictor:
     conf = Configs()
     experiment.evaluate()
 

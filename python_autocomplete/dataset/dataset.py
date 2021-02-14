@@ -1,5 +1,4 @@
 from pathlib import PurePath
-from typing import Dict, List
 
 import torch
 from torch.utils.data import Dataset, DataLoader
@@ -7,20 +6,8 @@ from torch.utils.data import Dataset, DataLoader
 from labml import lab, monit
 from labml.configs import option, BaseConfigs
 from labml_helpers.datasets.text import TextDataset
-from python_autocomplete.bpe import BPE, SourceCodeTokenizer
-
-
-class Tokenizer:
-    n_tokens: int
-    itos: List[str]
-    stoi: Dict[str, int]
-    is_trained: int
-
-    def encode(self, data: str, *, is_silent: bool = True):
-        raise NotImplementedError
-
-    def train(self, data: str):
-        pass
+from python_autocomplete.dataset import Tokenizer
+from python_autocomplete.dataset.bpe import BPE, SourceCodeTokenizer
 
 
 class CharacterTokenizer(Tokenizer):
@@ -36,7 +23,7 @@ class CharacterTokenizer(Tokenizer):
             self.is_trained = not retrain
 
     def encode(self, data: str, *, is_silent: bool = True):
-        return torch.tensor([self.stoi[c] for c in data if c in self.stoi], dtype=torch.long)
+        return [self.stoi[c] for c in data if c in self.stoi]
 
     def train(self, data: str):
         with monit.section("Build vocabulary"):
@@ -105,7 +92,7 @@ def _dataset(c: SourceCodeDataConfigs):
 @option(SourceCodeDataConfigs.tokenizer, 'bpe')
 def _bpe_tokenizer():
     from labml.utils.cache import cache_get
-    from python_autocomplete.bpe import BPEEnDe
+    from python_autocomplete.dataset.bpe import BPEEnDe
     bpe_cache = cache_get('bpe')
 
     if bpe_cache:
