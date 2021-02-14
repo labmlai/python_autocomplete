@@ -1,4 +1,5 @@
 from pathlib import PurePath
+from typing import Optional
 
 import torch
 from torch.utils.data import Dataset, DataLoader
@@ -48,8 +49,8 @@ class SourceCodeDataset:
     def get_train_valid(path: PurePath, is_load_data: bool):
         if is_load_data:
             with monit.section("Load data"):
-                train = TextDataset.load(path / 'train.py')[:1000_000]
-                valid = TextDataset.load(path / 'valid.py')[:1000_000]
+                train = TextDataset.load(path / 'train.py')
+                valid = TextDataset.load(path / 'valid.py')
         else:
             train = ''
             valid = ''
@@ -67,6 +68,7 @@ class SourceCodeDataset:
 
 class SourceCodeDataConfigs(BaseConfigs):
     dataset: SourceCodeDataset
+    truncate_data: int = 0
     is_load_data: bool = True
     tokenizer: Tokenizer
     retrain_tokenizer: bool = True
@@ -84,6 +86,8 @@ class SourceCodeDataConfigs(BaseConfigs):
 @option(SourceCodeDataConfigs.dataset, 'default')
 def _dataset(c: SourceCodeDataConfigs):
     train, valid = SourceCodeDataset.get_train_valid(lab.get_data_path(), c.is_load_data)
+    if c.truncate_data:
+        train, valid = train[:c.truncate_data], valid[:c.truncate_data]
     if not c.tokenizer.is_trained:
         c.tokenizer.train(train + valid)
     return SourceCodeDataset(c.tokenizer, train, valid)
@@ -120,7 +124,7 @@ class TokenDataset(Dataset):
         self.seq_len = seq_len
         self.data = data
         self.n_samples = (self.data.shape[0] - 1) // self.seq_len
-        if drop_last:
+        if not drop_last:
             self.n_batches = (self.n_samples + batch_size - 1) // batch_size
         else:
             self.n_batches = self.n_samples // batch_size
@@ -152,17 +156,21 @@ def transpose_batch(batch):
 def _train_loader(c: SourceCodeDataConfigs):
     return DataLoader(TokenDataset(data=c.text_to_i(c.dataset.train, is_silent=False),
                                    batch_size=c.batch_size,
-                                   seq_len=c.seq_len),
+                                   seq_len=c.seq_len,
+                                   drop_last=True),
                       batch_size=c.batch_size,
                       collate_fn=transpose_batch,
-                      shuffle=c.is_shuffle)
+                      shuffle=c.is_shuffle,
+                      drop_last=True)
 
 
 @option(SourceCodeDataConfigs.valid_loader)
 def _valid_loader(c: SourceCodeDataConfigs):
     return DataLoader(TokenDataset(data=c.text_to_i(c.dataset.valid, is_silent=False),
                                    batch_size=c.batch_size,
-                                   seq_len=c.seq_len),
+                                   seq_len=c.seq_len,
+                                   drop_last=True),
                       batch_size=c.batch_size,
                       collate_fn=transpose_batch,
-                      shuffle=c.is_shuffle)
+                      shuffle=c.is_shuffle,
+                      drop_last=True)

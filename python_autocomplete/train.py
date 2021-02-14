@@ -51,7 +51,7 @@ class Configs(TrainValidConfigs):
         data, target = batch[0].to(self.device), batch[1].to(self.device)
 
         if self.mode.is_train:
-            tracker.add_global_step(len(data))
+            tracker.add_global_step(target.shape[0] * target.shape[1])
 
         with self.mode.update(is_log_activations=batch_idx.is_last):
             state = self.state.get()
@@ -87,7 +87,9 @@ class Configs(TrainValidConfigs):
             output = output.argmax(dim=-1).squeeze(1)
             prompt += '' + self.text.tokenizer.itos[output[-1]]
             if self.is_token_by_token:
-                prompt = prompt[-1:]
+                prompt = self.text.tokenizer.itos[output[-1]]
+            else:
+                prompt += '' + self.text.tokenizer.itos[output[-1]]
             log += [('' + self.text.tokenizer.itos[output[-1]], Text.value)]
             state = self.state_updater(state, new_state)
 
@@ -260,22 +262,25 @@ def main():
     experiment.create(name="source_code",
                       comment='bpe')
     experiment.configs(conf, {
-        'model': 'transformer_model',
-        # 'model': 'transformer_xl_model',
+        # 'model': 'transformer_model',
+        'model': 'transformer_xl_model',
         'n_layers': 6,
         'epochs': 32,
-        'optimizer.optimizer': 'Noam',
-        'optimizer.learning_rate': 1.0,
+        'optimizer.optimizer': 'AdamW',
+        'optimizer.learning_rate': 1.25e-4,
         'device.cuda_device': 0,
-        'is_token_by_token': False,
-        'state_updater': 'simple',
+
+        'is_token_by_token': True,
+        'state_updater': 'transformer_memory',
+        'mem_len': 256,
 
         'text.is_shuffle': False,
-        'text.tokenizer': 'char',
+        'text.tokenizer': 'bpe',
         'text.batch_size': 12,
-        'text.seq_len': 512,
-
-        'inner_iterations': 10,
+        'text.seq_len': 256,
+        #
+        # 'inner_iterations': 10,
+        # 'text.truncate_data': 100_000,
     })
     experiment.add_pytorch_models(model=conf.model)
     with experiment.start():
