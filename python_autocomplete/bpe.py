@@ -13,6 +13,7 @@ class BPE:
     def __init__(self, bpe_en_de: 'BPEEnDe', tokenizer):
         self.bpe = bpe_en_de
         self.tokenizer = tokenizer
+        self.is_trained = True
 
     @property
     def n_tokens(self):
@@ -134,7 +135,7 @@ class BPEEnDe:
         return self.encoder.encode([self.char_stoi[c] for c in word if c in self.char_stoi])
 
 
-class Tokenizer:
+class WordTokenizer:
     def collect_words(self, data: str):
         raise NotImplementedError
 
@@ -145,7 +146,7 @@ class Tokenizer:
         raise NotImplementedError
 
 
-class SourceCodeTokenizer(Tokenizer):
+class SourceCodeTokenizer(WordTokenizer):
     def __init__(self):
         self.words = {}
 
@@ -207,7 +208,7 @@ class SourceCodeTokenizer(Tokenizer):
         return [w for _, w in words_list], [f for f, _ in words_list]
 
 
-class NoTokenizer(Tokenizer):
+class NoTokenizer(WordTokenizer):
     def __init__(self):
         self.data = ''
 
