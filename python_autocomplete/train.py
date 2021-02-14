@@ -11,7 +11,7 @@ from labml_helpers.module import Module
 from labml_helpers.train_valid import TrainValidConfigs, hook_model_outputs, BatchIndex
 from labml_nn.optimizers.configs import OptimizerConfigs
 from labml_nn.transformers import TransformerConfigs
-from python_autocomplete.dataset import SourceCodeDataConfigs
+from python_autocomplete.dataset.dataset import SourceCodeDataConfigs
 
 
 class Configs(TrainValidConfigs):
@@ -187,6 +187,27 @@ class StateUpdater:
     def __call__(self, old_state, new_state):
         return new_state
 
+    def get_from_batch(self, state, batch_idx):
+        if state is None:
+            return None
+        elif isinstance(state, torch.Tensor):
+            return state[batch_idx]
+        elif isinstance(state, tuple):
+            return tuple(s[batch_idx] for s in state)
+        elif isinstance(state, list):
+            return [s[batch_idx] for s in state]
+
+    def make_batch(self, batch):
+        assert isinstance(batch, list)
+        if batch[0] is None:
+            return None
+        elif isinstance(batch[0], torch.Tensor):
+            return torch.stack(batch)
+        elif isinstance(batch[0], tuple):
+            return tuple(torch.stack([b[n] for b in batch]) for n in range(len(batch[0])))
+        elif isinstance(batch[0], list):
+            return [torch.stack([b[n] for b in batch]) for n in range(len(batch[0]))]
+
 
 class MemoryUpdater(StateUpdater):
     def __init__(self, mem_len: int):
@@ -205,6 +226,12 @@ class MemoryUpdater(StateUpdater):
             mem = [m[-self.mem_len:] for m in mem]
 
         return mem
+
+    def get_from_batch(self, state, batch_idx):
+        return [m[:, batch_idx] for m in state]
+
+    def make_batch(self, batch):
+        return [torch.stack([b[n] for b in batch], dim=1) for n in range(len(batch[0]))]
 
 
 @option(Configs.state_updater)
@@ -243,10 +270,11 @@ def main():
         'is_token_by_token': False,
         'state_updater': 'simple',
 
-        'text.is_shuffle': True,
-        'text.tokenizer': 'bpe',
+        'text.is_shuffle': False,
+        'text.tokenizer': 'char',
         'text.batch_size': 12,
         'text.seq_len': 512,
+
         'inner_iterations': 10,
     })
     experiment.add_pytorch_models(model=conf.model)

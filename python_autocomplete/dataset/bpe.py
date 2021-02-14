@@ -1,18 +1,16 @@
-import string
 from functools import lru_cache
 from heapq import heappush, heappop
 from typing import List, Tuple
 
 from labml import lab, monit
 from labml.utils.cache import cache_set
+from python_autocomplete.dataset import Tokenizer, ID_CHARS
 
-ID_CHARS = set(string.ascii_letters + string.digits + '_')
 
-
-class BPE:
-    def __init__(self, bpe_en_de: 'BPEEnDe', tokenizer):
+class BPE(Tokenizer):
+    def __init__(self, bpe_en_de: 'BPEEnDe', word_tokenizer):
         self.bpe = bpe_en_de
-        self.tokenizer = tokenizer
+        self.word_tokenizer = word_tokenizer
         self.is_trained = True
 
     @property
@@ -28,7 +26,7 @@ class BPE:
         return self.bpe.bpe_stoi
 
     def encode(self, data: str, *, is_silent: bool = True):
-        words = self.tokenizer.tokenize(data, is_silent=is_silent)
+        words = self.word_tokenizer.tokenize(data, is_silent=is_silent)
 
         res = []
         for w in monit.iterate('Encode words', words, is_silent=is_silent):
@@ -39,6 +37,15 @@ class BPE:
     def __call__(self, data: str):
         encoded = self.encode(data)
         return [self.itos[c] for c in encoded]
+
+    def rstrip(self, data: str):
+        words = self.word_tokenizer.tokenize(data, is_silent=True)
+        words = words[:-1]
+        res = []
+        for w in words:
+            res += self.bpe.encode(w)
+
+        return ''.join(words), res
 
 
 class _BPEEncoder:
