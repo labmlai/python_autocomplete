@@ -1,5 +1,5 @@
 import string
-from typing import List, Dict, Set, Optional, Any, Tuple
+from typing import Set, Optional, Any, Tuple
 
 import numpy as np
 import torch
@@ -9,17 +9,16 @@ from torch import nn
 from labml import experiment, logger, lab, monit
 from labml.logger import Text, Style
 from labml.utils.pytorch import get_modules
-from labml_helpers.datasets.text import TextDataset
 from labml_helpers.module import Module
+from python_autocomplete.dataset import Tokenizer
 from python_autocomplete.train import Configs, StateUpdater
 
 
 class Predictor:
-    def __init__(self, model: Module, text: TextDataset, *,
+    def __init__(self, model: Module, tokenizer: Tokenizer, *,
                  state_updater: StateUpdater,
                  is_token_by_token: bool):
-        text.is_silent = True
-        self.text = text
+        self.tokenizer = tokenizer
         self.is_token_by_token = is_token_by_token
         self.state_updater = state_updater
         self.model = model
@@ -30,8 +29,9 @@ class Predictor:
         self.time_check = 0
 
     def _get_predictions(self, prompt: str, state: Any) -> Tuple[torch.Tensor, Any]:
-        data = self.text.text_to_i(prompt)[-512:]
-        data = data.to(self.model.device).unsqueeze(-1)
+        data = torch.tensor(self.tokenizer.encode(prompt),
+                            dtype=torch.long,
+                            device=self.model.device)[-512:].unsqueeze(-1)
 
         # Get predictions
         with torch.no_grad():
@@ -57,7 +57,7 @@ class Predictor:
     def get_next_token(self, prompt: str, state: Any) -> Tuple[str, Any]:
         prediction, state = self.get_predictions(prompt, state)
         best = prediction.argmax(-1).squeeze().item()
-        return self.text.itos[best], state
+        return self.tokenizer.itos[best], state
 
     def get_start_state(self, prompt: str):
         assert prompt
@@ -151,10 +151,10 @@ def anomalies(predictor: Predictor, text: str):
             logs = [(f"{line_no: 4d}: ", Text.meta)]
         elif c == '\r':
             continue
-        elif c not in predictor.text.stoi:
+        elif c not in predictor.tokenizer.stoi:
             logs.append(c)
         else:
-            next_id = predictor.text.stoi[c]
+            next_id = predictor.tokenizer.stoi[c]
             prob = preds[next_id]
             if prob > 0.9:
                 logs.append((c, [Style.bold, Text.success, Style.underline]))
@@ -219,22 +219,21 @@ def get_predictor():
     # And for latest checkpoint
     # checkpoint = None
 
-    run_uuid = '275e62e66dc711eb9d162f2ddfc33452' # bpe
-    # run_uuid = 'c45857026a2811eba16c27c69839e51f'  # xl
+    run_uuid = '109d1b8c6e8611eb80e13584488b68a4'  # bpe
     checkpoint = None
-    run_uuid, checkpoint = experiment.load_bundle(
-        lab.get_path() / 'saved_checkpoint.tar.gz',
-        url='https://github.com/lab-ml/python_autocomplete/releases/download/0.0.4/transformer_checkpoint.tar.gz')
+    # run_uuid, checkpoint = experiment.load_bundle(
+    #     lab.get_path() / 'saved_checkpoint.tar.gz',
+    #     url='https://github.com/lab-ml/python_autocomplete/releases/download/0.0.4/transformer_checkpoint.tar.gz')
 
     conf_dict = experiment.load_configs(run_uuid)
-    conf_dict['is_load_data'] = False
+    conf_dict['text.is_load_data'] = False
     experiment.configs(conf, conf_dict)
     experiment.add_pytorch_models(get_modules(conf))
     experiment.load(run_uuid, checkpoint)
 
     experiment.start()
     conf.model.eval()
-    return Predictor(conf.model, conf.text,
+    return Predictor(conf.model, conf.text.tokenizer,
                      state_updater=conf.state_updater,
                      is_token_by_token=conf.is_token_by_token)
 

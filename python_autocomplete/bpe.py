@@ -27,7 +27,7 @@ class BPE:
     def stoi(self):
         return self.bpe.bpe_stoi
 
-    def encode(self, data: str, *, is_silent: bool = False):
+    def encode(self, data: str, *, is_silent: bool = True):
         words = self.tokenizer.tokenize(data, is_silent=is_silent)
 
         res = []
