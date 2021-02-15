@@ -15,25 +15,28 @@ from python_autocomplete.train import Configs, StateUpdater
 EPS_PROB = 1e-6
 MIN_BEAM_PROB = 1e-4
 
+
 class PredictionComplete:
     def __call__(self, text, token_str: str):
         raise NotImplementedError
 
 
 class NextWordPredictionComplete(PredictionComplete):
-    def __init__(self, prompt: str):
+    def __init__(self, prompt: str, rest: str, min_length: int):
+        self.min_length = min_length
+        self.rest = rest
         self.is_id = False
         if prompt and prompt[-1] in ID_CHARS:
             self.is_id = True
 
     def __call__(self, text, token_str: str):
-        prediction = set(token_str)
-        intersection = prediction.intersection(ID_CHARS)
-        is_id = len(intersection) > 0 and intersection == prediction
-        is_not_id = intersection != prediction
-        if is_id and is_not_id:
-            return True
-        return is_id == self.is_id
+        if len(text) - len(self.rest) < self.min_length:
+            return False
+
+        prev_is_id = text[-1] in ID_CHARS
+        last_is_id = token_str[-1] in ID_CHARS
+
+        return prev_is_id != last_is_id
 
 
 class BeamSearch:
@@ -73,6 +76,18 @@ class BeamSearch:
 
         state = self.state_updater.get_from_batch(state, beam_idx)
         text = self.text[beam_idx] + token_str
+        heappush(self.result_heap, (prob, (text, state)))
+
+        return True
+
+    def add_prediction_before_token(self, prob: float, beam_idx: int, state):
+        if len(self.result_heap) == self.max_beam_size:
+            if self.result_heap[0][0] > prob - EPS_PROB:
+                return False
+            heappop(self.result_heap)
+
+        state = self.state_updater.get_from_batch(state, beam_idx)
+        text = self.text[beam_idx]
         heappush(self.result_heap, (prob, (text, state)))
 
         return True
@@ -121,7 +136,7 @@ class BeamSearch:
 
         return new_prompt, new_state
 
-    def update(self, next_token, itos: List[str], state):
+    def update(self, next_token, itos: List[str], state, old_state):
         self.beam_heap = []
 
         for b, text in enumerate(self.text):
@@ -141,8 +156,12 @@ class BeamSearch:
                     continue
 
                 if self.prediction_complete(text, token_str):
-                    if not self.add_prediction(self.probs[b] * tokens[token].item(), b, token_str, state):
+                    if not self.add_prediction_before_token(self.probs[b], b, old_state):
                         break
+                    else:
+                        break
+                    # if not self.add_prediction(self.probs[b] * tokens[token].item(), b, token_str, state):
+                    #     break
                 elif not self.add_beam(self.probs[b] * tokens[token].item(), b, token):
                     break
 
@@ -190,9 +209,9 @@ class Predictor:
                           probs, self.is_token_by_token)
 
         for _ in range(10):
-            next_token, state = self._get_predictions(prompt, state)
-            beam.update(next_token, self.tokenizer.itos, state)
-            prompt, state = beam.next_batch(prompt, state, self.tokenizer.itos)
+            next_token, new_state = self._get_predictions(prompt, state)
+            beam.update(next_token, self.tokenizer.itos, new_state, state)
+            prompt, state = beam.next_batch(prompt, new_state, self.tokenizer.itos)
 
             if prompt is None:
                 break
@@ -216,7 +235,7 @@ def evaluate(predictor: Predictor, text: str):
         prefix = text[:i + 1]
         stripped, prompt = predictor.rstrip(prefix)
         rest = prefix[len(stripped):]
-        prediction_complete = NextWordPredictionComplete(stripped)
+        prediction_complete = NextWordPredictionComplete(stripped, rest, 5)
         prompt = torch.tensor(prompt, dtype=torch.long).unsqueeze(-1)
 
         predictions = predictor.get_next_word(prompt, None, rest, [1.], prediction_complete, 5)
