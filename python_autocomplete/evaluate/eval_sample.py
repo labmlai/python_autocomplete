@@ -18,7 +18,7 @@ def evaluate(predictor: Predictor, text: str):
         prefix = text[:i + 1]
         stripped, prompt = predictor.rstrip(prefix)
         rest = prefix[len(stripped):]
-        prediction_complete = NextWordPredictionComplete(stripped, rest, 5)
+        prediction_complete = NextWordPredictionComplete(rest, 5)
         prompt = torch.tensor(prompt, dtype=torch.long).unsqueeze(-1)
 
         predictions = predictor.get_next_word(prompt, None, rest, [1.], prediction_complete, 5)
