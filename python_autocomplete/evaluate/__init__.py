@@ -19,12 +19,9 @@ class PredictionComplete:
 
 
 class NextWordPredictionComplete(PredictionComplete):
-    def __init__(self, prompt: str, rest: str, min_length: int):
+    def __init__(self, rest: str, min_length: int):
         self.min_length = min_length
         self.rest = rest
-        self.is_id = False
-        if prompt and prompt[-1] in ID_CHARS:
-            self.is_id = True
 
     def __call__(self, text, token_str: str):
         if len(text) - len(self.rest) < self.min_length:
@@ -159,7 +156,7 @@ class BeamSearch:
                         break
                     # if not self.add_prediction(self.probs[b] * tokens[token].item(), b, token_str, state):
                     #     break
-                elif not self.add_beam(self.probs[b] * tokens[token].item(), b, token):
+                if not self.add_beam(self.probs[b] * tokens[token].item(), b, token):
                     break
 
 
