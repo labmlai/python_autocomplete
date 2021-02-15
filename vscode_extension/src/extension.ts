@@ -42,6 +42,56 @@ function getPrompt(document: vscode.TextDocument, position: vscode.Position) {
 	return text
 }
 
+function cleanupPredictions(predictions: string[]): string[] {
+	let res = []
+	for(let p of predictions) {
+		let nl = p.indexOf('\n')
+		if (nl !== -1) {
+			p = p.substr(0, nl)
+		}
+		if(p !== '') {
+			res.push(p)
+		}
+	}
+
+	return res
+}
+
+function addPrefix(prefix: string, predictions: string[]): string[] {
+	let res = []
+	for(let p of predictions) {
+		res.push(prefix + p)
+	}
+
+	return res
+}
+
+function hasNewLine(predictions: string[]): boolean[] {
+	let res = []
+	for(let p of predictions) {
+		res.push(p.indexOf('\n') !== -1)
+	}
+
+	return res
+}
+
+function getCompletions(predictions: string[], nl: boolean[]): vscode.CompletionItem[] {
+	let res = []
+	for(let i = 0; i < predictions.length; ++i) {
+			// Create a completion
+			const simpleCompletion = new vscode.CompletionItem(predictions[i])
+			simpleCompletion.kind = vscode.CompletionItemKind.Text
+			// Dont trigger autocompletion if we hit a new line
+			if (!nl[i]) {
+				simpleCompletion.command = { command: 'editor.action.triggerSuggest', title: 'Re-trigger completions...' }
+			}
+
+			res.push(simpleCompletion)
+	}
+
+	return res
+}
+
 export function activate(context: vscode.ExtensionContext) {
 	const provider = vscode.languages.registerCompletionItemProvider('python', {
 		async provideCompletionItems(document: vscode.TextDocument, position: vscode.Position, token: vscode.CancellationToken, context: vscode.CompletionContext) {
@@ -59,17 +109,13 @@ export function activate(context: vscode.ExtensionContext) {
 				return []
 			}
 
-			let prediction: string = response.prediction
+			let predictions: string[] = response.prediction
+			const nl = hasNewLine(predictions)
+			predictions = cleanupPredictions(predictions)
 
-			// Remove new lines because it's a bit annoying?
-			let nl = prediction.indexOf('\n')
-			if (nl !== -1) {
-				prediction = prediction.substr(0, nl)
-			}
-
-			if (prediction === '') {
+			if (predictions.length === 0) {
 				// If at end of a line just predict new line, to avoid annoying default vscode predictions
-				if (nl !== -1) {
+				if (nl.length > 0 && nl[0]) {
 					const simpleCompletion = new vscode.CompletionItem('\n')
 					simpleCompletion.kind = vscode.CompletionItemKind.Text
 					simpleCompletion.command = { command: 'editor.action.triggerSuggest', title: 'Re-trigger completions...' }
@@ -83,18 +129,10 @@ export function activate(context: vscode.ExtensionContext) {
 			if (range != null) {
 				const line = document.lineAt(position).text
 				let prefix = line.substring(range.start.character, position.character)
-				prediction = prefix + prediction
+				predictions = addPrefix(prefix, predictions)
 			}
 
-			// Create a completion
-			const simpleCompletion = new vscode.CompletionItem(prediction)
-			simpleCompletion.kind = vscode.CompletionItemKind.Text
-			// Dont trigger autocompletion if we hit a new line
-			if (nl === -1) {
-				simpleCompletion.command = { command: 'editor.action.triggerSuggest', title: 'Re-trigger completions...' }
-			}
-
-			return [simpleCompletion]
+			return getCompletions(predictions, nl)
 		}
 	})
 
