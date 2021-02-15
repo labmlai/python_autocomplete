@@ -5,7 +5,7 @@ import threading
 from flask import Flask, request, jsonify
 
 from labml import monit
-from python_autocomplete.evaluate import get_predictor
+from python_autocomplete.evaluate.factory import get_predictor
 
 TOKEN_CHARS = set(string.ascii_letters + string.digits + ' ' + '\n' + '\r' + '_')
 
