@@ -230,9 +230,14 @@ class MemoryUpdater(StateUpdater):
         return mem
 
     def get_from_batch(self, state, batch_idx):
+        if state is None:
+            return None
+
         return [m[:, batch_idx] for m in state]
 
     def make_batch(self, batch):
+        if batch[0] is None:
+            return None
         return [torch.stack([b[n] for b in batch], dim=1) for n in range(len(batch[0]))]
 
 

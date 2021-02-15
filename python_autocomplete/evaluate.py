@@ -12,6 +12,8 @@ from labml_helpers.module import Module
 from python_autocomplete.dataset import Tokenizer, ID_CHARS
 from python_autocomplete.train import Configs, StateUpdater
 
+EPS_PROB = 1e-6
+MIN_BEAM_PROB = 1e-4
 
 class PredictionComplete:
     def __call__(self, text, token_str: str):
@@ -27,7 +29,7 @@ class NextWordPredictionComplete(PredictionComplete):
     def __call__(self, text, token_str: str):
         prediction = set(token_str)
         intersection = prediction.intersection(ID_CHARS)
-        is_id = intersection and intersection == prediction
+        is_id = len(intersection) > 0 and intersection == prediction
         is_not_id = intersection != prediction
         if is_id and is_not_id:
             return True
@@ -65,24 +67,31 @@ class BeamSearch:
 
     def add_prediction(self, prob: float, beam_idx: int, token_str: str, state):
         if len(self.result_heap) == self.max_beam_size:
-            if self.result_heap[0][0] > prob:
-                return
+            if self.result_heap[0][0] > prob - EPS_PROB:
+                return False
             heappop(self.result_heap)
 
         state = self.state_updater.get_from_batch(state, beam_idx)
         text = self.text[beam_idx] + token_str
         heappush(self.result_heap, (prob, (text, state)))
 
+        return True
+
     def add_beam(self, prob: float, beam_idx: int, token: int):
-        if self.result_heap and self.result_heap[0][0] > prob:
-            return
+        if self.result_heap and self.result_heap[0][0] > prob - EPS_PROB:
+            return False
+
+        if prob < MIN_BEAM_PROB:
+            return False
 
         if len(self.beam_heap) == self.max_beam_size:
-            if self.beam_heap[0][0] > prob:
-                return
+            if self.beam_heap[0][0] > prob - EPS_PROB:
+                return False
             heappop(self.beam_heap)
 
         heappush(self.beam_heap, (prob, (beam_idx, token)))
+
+        return True
 
     def next_batch(self, prompt: torch.Tensor, state: Any, itos: List[str]):
         if not self.beam_heap:
@@ -122,13 +131,20 @@ class BeamSearch:
             else:
                 check_rest = self.rest[len(text):]
 
-            for token, token_str in enumerate(itos):
+            tokens = next_token[b]
+            sort_idx = torch.argsort(tokens)
+
+            for i in reversed(range(len(tokens))):
+                token = sort_idx[i]
+                token_str = itos[token]
                 if not self.is_substr(check_rest, token_str):
                     continue
 
                 if self.prediction_complete(text, token_str):
-                    self.add_prediction(self.probs[b] * next_token[b][token].item(), b, token_str, state)
-                self.add_beam(self.probs[b] * next_token[b][token].item(), b, token)
+                    if not self.add_prediction(self.probs[b] * tokens[token].item(), b, token_str, state):
+                        break
+                elif not self.add_beam(self.probs[b] * tokens[token].item(), b, token):
+                    break
 
 
 class Prediction(NamedTuple):
@@ -329,7 +345,7 @@ def get_predictor() -> Predictor:
     # And for latest checkpoint
     # checkpoint = None
 
-    run_uuid = '109d1b8c6e8611eb80e13584488b68a4'  # bpe
+    run_uuid = 'a6cff3706ec411ebadd9bf753b33bae6'  # bpe
     checkpoint = None
     # run_uuid, checkpoint = experiment.load_bundle(
     #     lab.get_path() / 'saved_checkpoint.tar.gz',
