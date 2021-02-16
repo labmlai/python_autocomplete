@@ -4,7 +4,7 @@ from python_autocomplete.evaluate import Predictor
 from python_autocomplete.train import Configs
 
 
-def get_predictor() -> Predictor:
+def load_experiment() -> Configs:
     conf = Configs()
     experiment.evaluate()
 
@@ -29,6 +29,12 @@ def get_predictor() -> Predictor:
     experiment.load(run_uuid, checkpoint)
 
     experiment.start()
+
+    return conf
+
+
+def get_predictor() -> Predictor:
+    conf = load_experiment()
     conf.model.eval()
     return Predictor(conf.model, conf.text.tokenizer,
                      state_updater=conf.state_updater,
