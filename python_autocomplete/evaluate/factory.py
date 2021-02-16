@@ -1,4 +1,4 @@
-from labml import experiment
+from labml import experiment, lab
 from labml.utils.pytorch import get_modules
 from python_autocomplete.evaluate import Predictor
 from python_autocomplete.train import Configs
@@ -16,11 +16,11 @@ def load_experiment() -> Configs:
     # And for latest checkpoint
     # checkpoint = None
 
-    run_uuid = 'a6cff3706ec411ebadd9bf753b33bae6'  # bpe
-    checkpoint = None
-    # run_uuid, checkpoint = experiment.load_bundle(
-    #     lab.get_path() / 'saved_checkpoint.tar.gz',
-    #     url='https://github.com/lab-ml/python_autocomplete/releases/download/0.0.4/transformer_checkpoint.tar.gz')
+    # run_uuid = 'a6cff3706ec411ebadd9bf753b33bae6'  # bpe
+    # checkpoint = None
+    run_uuid, checkpoint = experiment.load_bundle(
+        lab.get_path() / 'saved_checkpoint.tar.gz',
+        url='https://github.com/lab-ml/python_autocomplete/releases/download/0.0.5/bundle.tar.gz')
 
     conf_dict = experiment.load_configs(run_uuid)
     conf_dict['text.is_load_data'] = False
