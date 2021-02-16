@@ -1,13 +1,12 @@
 import json
-import string
 import threading
 
+import torch
 from flask import Flask, request, jsonify
 
 from labml import monit
-from python_autocomplete.evaluate import get_predictor
-
-TOKEN_CHARS = set(string.ascii_letters + string.digits + ' ' + '\n' + '\r' + '_')
+from python_autocomplete.evaluate import NextWordPredictionComplete
+from python_autocomplete.evaluate.factory import get_predictor
 
 app = Flask('python_autocomplete')
 predictor = get_predictor()
@@ -21,17 +20,25 @@ def home():
 
 @app.route('/autocomplete', methods=['POST'])
 def autocomplete():
-    prompt = request.json['prompt']
-    if not prompt:
+    prefix = request.json['prompt']
+    if not prefix:
         return jsonify({'success': False})
 
     with monit.section('Predict') as s:
         acquired = lock.acquire(blocking=False)
         if acquired:
-            res, state = predictor.get_token(prompt, TOKEN_CHARS, None)
+            stripped, prompt = predictor.rstrip(prefix)
+            rest = prefix[len(stripped):]
+            prediction_complete = NextWordPredictionComplete(rest, 5)
+            prompt = torch.tensor(prompt, dtype=torch.long).unsqueeze(-1)
+
+            predictions = predictor.get_next_word(prompt, None, rest, [1.], prediction_complete, 5)
+            predictions.sort(key=lambda x: -x[0])
+
+            results = [pred.text[len(rest):] for pred in predictions]
             lock.release()
-            s.message = f'{json.dumps(prompt[-5:])} -> {json.dumps(res)}'
-            return jsonify({'success': True, 'prediction': res})
+            s.message = f'{json.dumps(prefix[-5:])} -> {json.dumps(results)}'
+            return jsonify({'success': True, 'prediction': results})
         else:
             monit.fail()
             return jsonify({'success': False})
