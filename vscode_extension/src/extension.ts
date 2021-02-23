@@ -42,12 +42,56 @@ function getPrompt(document: vscode.TextDocument, position: vscode.Position) {
 	return text
 }
 
-function cleanupPredictions(predictions: string[]): string[] {
+function removeNewLine(predictions: string[]): string[] {
 	let res = []
 	for(let p of predictions) {
 		let nl = p.indexOf('\n')
 		if (nl !== -1) {
 			p = p.substr(0, nl)
+		}
+		res.push(p)
+	}
+
+	return res
+}
+
+function trimRight(predictions: string[]): string[] {
+	let res = []
+
+	for(let p of predictions) {
+		p = p.trimRight()
+		res.push(p)
+	}
+
+	return res
+}
+
+function removeDuplicates(predictions: string[]): string[] {
+	let set = new Set<string>()
+
+	for(let p of predictions) {
+		if(p !== '') {
+			set.add(p)
+		}
+	}
+
+	let res = []
+	for(let p of set) {
+		res.push(p)
+	}
+
+	return res
+}
+
+function removeSuffix(predictions: string[], document: vscode.TextDocument, position: vscode.Position): string[] {
+	const line = document.lineAt(position).text
+	const text = line.substr(position.character)
+	let res = []
+
+	for(let p of predictions) {
+		let suffix = p.indexOf(text[0])
+		if (suffix !== -1) {
+			p = p.substr(0, suffix)
 		}
 		if(p !== '') {
 			res.push(p)
@@ -110,8 +154,19 @@ export function activate(context: vscode.ExtensionContext) {
 			}
 
 			let predictions: string[] = response.prediction
+			let probs: number[] = response.probs
+			for(let i = 0; i < probs.length - 1; ++i) {
+				if(probs[i] > probs[i + 1] * 4) {
+					predictions = predictions.slice(0, i + 1)
+					break
+				}
+			}
+			
 			const nl = hasNewLine(predictions)
-			predictions = cleanupPredictions(predictions)
+			predictions = removeNewLine(predictions)
+			predictions = removeSuffix(predictions, document, position)
+			predictions = trimRight(predictions)
+			predictions = removeDuplicates(predictions)
 
 			if (predictions.length === 0) {
 				// If at end of a line just predict new line, to avoid annoying default vscode predictions
@@ -120,8 +175,9 @@ export function activate(context: vscode.ExtensionContext) {
 					simpleCompletion.kind = vscode.CompletionItemKind.Text
 					simpleCompletion.command = { command: 'editor.action.triggerSuggest', title: 'Re-trigger completions...' }
 					return [simpleCompletion]
+				} else {
+					return []
 				}
-				return []
 			}
 
 			// Add any word prefix from text (because thats how vscode works)

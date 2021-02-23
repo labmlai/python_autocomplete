@@ -33,12 +33,13 @@ def autocomplete():
             prompt = torch.tensor(prompt, dtype=torch.long).unsqueeze(-1)
 
             predictions = predictor.get_next_word(prompt, None, rest, [1.], prediction_complete, 5)
-            predictions.sort(key=lambda x: -x[0])
+            predictions.sort(key=lambda x: -x.prob)
 
             results = [pred.text[len(rest):] for pred in predictions]
+            probs = [pred.prob for pred in predictions]
             lock.release()
             s.message = f'{json.dumps(prefix[-5:])} -> {json.dumps(results)}'
-            return jsonify({'success': True, 'prediction': results})
+            return jsonify({'success': True, 'prediction': results, 'probs': probs})
         else:
             monit.fail()
             return jsonify({'success': False})
