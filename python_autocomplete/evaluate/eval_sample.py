@@ -2,7 +2,8 @@ import torch
 
 from labml import logger, lab, monit
 from labml.logger import Text, Style
-from python_autocomplete.evaluate import NextWordPredictionComplete, Predictor
+from python_autocomplete.evaluate import Predictor
+from python_autocomplete.evaluate.beam_search import NextWordPredictionComplete
 from python_autocomplete.evaluate.factory import get_predictor
 
 
