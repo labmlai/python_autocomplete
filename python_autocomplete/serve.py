@@ -5,7 +5,7 @@ import torch
 from flask import Flask, request, jsonify
 
 from labml import monit
-from python_autocomplete.evaluate import NextWordPredictionComplete
+from python_autocomplete.evaluate.beam_search import NextWordPredictionComplete
 from python_autocomplete.evaluate.factory import get_predictor
 
 app = Flask('python_autocomplete')
