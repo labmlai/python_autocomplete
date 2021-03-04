@@ -32,11 +32,25 @@ class NextWordPredictionComplete(PredictionComplete):
 
 
 class BeamSearch:
-    def __init__(self, beam_size: int, prediction_complete: PredictionComplete,
+    def __init__(self):
+        pass
+
+    def next_batch(self, prompt: torch.Tensor, state: Any):
+        raise NotImplementedError
+
+    def update(self, next_token, state, old_state):
+        raise NotImplementedError
+
+
+class BeamSearchSimple(BeamSearch):
+    def __init__(self, *, beam_size: int, prediction_complete: PredictionComplete,
                  max_beam_size: int, rest: str,
                  state_updater: 'StateUpdater',
                  probs: Optional[List[float]],
-                 is_token_by_token: bool):
+                 is_token_by_token: bool,
+                 itos: List[str]):
+        super().__init__()
+        self.itos = itos
         self.is_token_by_token = is_token_by_token
         self.state_updater = state_updater
         self.prediction_complete = prediction_complete
@@ -100,7 +114,7 @@ class BeamSearch:
 
         return True
 
-    def next_batch(self, prompt: torch.Tensor, state: Any, itos: List[str]):
+    def next_batch(self, prompt: torch.Tensor, state: Any):
         if not self.beam_heap:
             return None, None
 
@@ -119,7 +133,7 @@ class BeamSearch:
                 new_prompt.append(torch.cat((prompt[1:, b], token)))
             new_state.append(self.state_updater.get_from_batch(state, b))
             self.probs.append(prob)
-            self.text.append(texts[b] + itos[token])
+            self.text.append(texts[b] + self.itos[token])
 
         new_prompt = torch.stack(new_prompt, dim=1)
         new_state = self.state_updater.make_batch(new_state)
@@ -128,7 +142,7 @@ class BeamSearch:
 
         return new_prompt, new_state
 
-    def update(self, next_token, itos: List[str], state, old_state):
+    def update(self, next_token, state, old_state):
         self.beam_heap = []
 
         for b, text in enumerate(self.text):
@@ -143,7 +157,7 @@ class BeamSearch:
 
             for i in reversed(range(len(tokens))):
                 token = sort_idx[i]
-                token_str = itos[token]
+                token_str = self.itos[token]
                 if not self.is_substr(check_rest, token_str):
                     continue
 

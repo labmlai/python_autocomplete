@@ -4,9 +4,11 @@ import torch
 import torch.nn
 from torch import nn
 
+from labml import monit
 from labml_helpers.module import Module
 from python_autocomplete.dataset import Tokenizer
-from python_autocomplete.evaluate.beam_search import PredictionComplete, BeamSearch
+from python_autocomplete.evaluate.beam_search import PredictionComplete, BeamSearch, BeamSearchSimple
+from python_autocomplete.evaluate.beam_search_lengthy import BeamSearchLengthy
 from python_autocomplete.train import StateUpdater
 
 
@@ -49,13 +51,21 @@ class Predictor:
                       prediction_complete: PredictionComplete,
                       max_beam_size: int) -> \
             List[Prediction]:
-        beam = BeamSearch(prompt.shape[1], prediction_complete, max_beam_size, rest, self.state_updater,
-                          probs, self.is_token_by_token)
+        beam = BeamSearchSimple(beam_size=prompt.shape[1],
+                                prediction_complete=prediction_complete,
+                                max_beam_size=max_beam_size,
+                                rest=rest,
+                                state_updater=self.state_updater,
+                                probs=probs,
+                                is_token_by_token=self.is_token_by_token,
+                                itos=self.tokenizer.itos)
 
         for _ in range(10):
-            next_token, new_state = self._get_predictions(prompt, state)
-            beam.update(next_token, self.tokenizer.itos, new_state, state)
-            prompt, state = beam.next_batch(prompt, new_state, self.tokenizer.itos)
+            with monit.section('Predict', is_silent=True):
+                next_token, new_state = self._get_predictions(prompt, state)
+            with monit.section('Beam', is_silent=True):
+                beam.update(next_token, new_state, state)
+                prompt, state = beam.next_batch(prompt, new_state)
 
             if prompt is None:
                 break
