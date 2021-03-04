@@ -5,6 +5,10 @@
 
 # Python Autocomplete
 
+**[Python Autocompletion Video](https://www.youtube.com/watch?v=ZFzxBPBUh0M)**
+
+[![Python Autocompletion Video](https://img.youtube.com/vi/ZFzxBPBUh0M/0.jpg)](https://www.youtube.com/watch?v=ZFzxBPBUh0M)
+
 This is a learning/demo project to show how deep learning can be used to auto complete Python code.
 You can experiment with LSTM and Transformer models.
 We also have built a simple VSCode extension to try out the trained models.
