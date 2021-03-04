@@ -141,6 +141,7 @@ export function activate(context: vscode.ExtensionContext) {
 		async provideCompletionItems(document: vscode.TextDocument, position: vscode.Position, token: vscode.CancellationToken, context: vscode.CompletionContext) {
 			const prompt = getPrompt(document, position)
 			let response
+			const fetchTime = new Date().getTime()
 
 			try {
 				response = await fetch(prompt)
@@ -188,6 +189,7 @@ export function activate(context: vscode.ExtensionContext) {
 				predictions = addPrefix(prefix, predictions)
 			}
 
+			console.log(`Featching ${new Date().getTime() - fetchTime}ms`)
 			return getCompletions(predictions, nl)
 		}
 	})
