@@ -5,7 +5,7 @@
 
 # Python Autocomplete
 
-**[Python Autocompletion Video](https://www.youtube.com/watch?v=ZFzxBPBUh0M)**
+**[Python Autocompletion Video](https://www.youtube.com/watch?v=ZFzxBPBUh0M)** and a [Twitter thread describing how it works](https://twitter.com/labmlai/status/1367444214963838978)
 
 [![Python Autocompletion Video](https://img.youtube.com/vi/ZFzxBPBUh0M/0.jpg)](https://www.youtube.com/watch?v=ZFzxBPBUh0M)
 
