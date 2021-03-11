@@ -9,7 +9,7 @@
   <img src="/images/vscode_attention.gif?raw=true" title="VSCode plugin">
 </p>
 
-**[Python Autocompletion Video](https://www.youtube.com/watch?v=ZFzxBPBUh0M)** and a [Twitter thread describing how it works](https://twitter.com/labmlai/status/1367444214963838978)
+[The full length Python autocompletion Video](https://www.youtube.com/watch?v=ZFzxBPBUh0M) and a [Twitter thread describing how it works](https://twitter.com/labmlai/status/1367444214963838978)
 
 This is a learning/demo project to show how deep learning can be used to auto complete Python code.
 You can experiment with LSTM and Transformer models.
