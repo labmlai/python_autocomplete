@@ -31,6 +31,24 @@ class NextWordPredictionComplete(PredictionComplete):
         return prev_is_id != last_is_id
 
 
+class NextWordNewLinePredictionComplete(PredictionComplete):
+    def __init__(self, rest: str, min_length: int):
+        self.min_length = min_length
+        self.rest = rest
+
+    def __call__(self, text, token_str: str):
+        if len(text) - len(self.rest) < self.min_length:
+            return False
+
+        if '\n' in token_str:
+            return True
+
+        prev_is_id = text[-1] in ID_CHARS
+        last_is_id = token_str[-1] in ID_CHARS
+
+        return prev_is_id != last_is_id
+
+
 class BeamSearch:
     def __init__(self):
         pass

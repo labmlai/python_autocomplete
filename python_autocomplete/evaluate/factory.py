@@ -24,6 +24,7 @@ def load_experiment() -> Configs:
 
     conf_dict = experiment.load_configs(run_uuid)
     conf_dict['text.is_load_data'] = False
+    conf_dict['device.cuda_device'] = 1
     experiment.configs(conf, conf_dict)
     experiment.add_pytorch_models(get_modules(conf))
     experiment.load(run_uuid, checkpoint)
